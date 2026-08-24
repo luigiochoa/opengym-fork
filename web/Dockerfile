@@ -12,6 +12,19 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci 2>/dev/null || npm install
 COPY frontend/ ./
+# White-label (optional). Defaults match upstream openGym.
+ARG VITE_APP_NAME=openGym
+ARG VITE_APP_DESCRIPTION="Personal gym & body weight tracker"
+ARG VITE_DEFAULT_ACCENT=lime
+ARG VITE_SOURCE_URL=https://gitlab.com/DuarteSantos8/opengym
+ARG VITE_BRAND_TAGLINE=
+ARG VITE_BRAND_LOGO=
+ENV VITE_APP_NAME=$VITE_APP_NAME \
+    VITE_APP_DESCRIPTION=$VITE_APP_DESCRIPTION \
+    VITE_DEFAULT_ACCENT=$VITE_DEFAULT_ACCENT \
+    VITE_SOURCE_URL=$VITE_SOURCE_URL \
+    VITE_BRAND_TAGLINE=$VITE_BRAND_TAGLINE \
+    VITE_BRAND_LOGO=$VITE_BRAND_LOGO
 RUN npm run build
 
 FROM nginx:alpine

@@ -1,0 +1,10 @@
+{
+  "clientId": "demo",
+  "appName": "Gym Demo",
+  "appDescription": "App de socios — Gym Demo (pack inicial MVP)",
+  "tagline": "Tu gimnasio, tu progreso",
+  "accent": "sky",
+  "useLogo": true,
+  "sourceUrl": "https://github.com/luigiochoa/opengym-fork",
+  "rpName": "Gym Demo"
+}

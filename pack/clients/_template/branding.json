@@ -1,0 +1,10 @@
+{
+  "clientId": "CLIENT_ID",
+  "appName": "Nombre del Gym",
+  "appDescription": "App de socios — Nombre del Gym",
+  "tagline": "Entrena con nosotros",
+  "accent": "sky",
+  "useLogo": true,
+  "sourceUrl": "https://github.com/luigiochoa/opengym-fork",
+  "rpName": "Nombre del Gym"
+}
