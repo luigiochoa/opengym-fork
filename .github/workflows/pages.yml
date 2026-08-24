@@ -43,8 +43,6 @@ jobs:
           VITE_IMG_BASE: ${{ env.DATASET }}/images/
           VITE_GIF_BASE: ${{ env.DATASET }}/videos/
       - uses: actions/configure-pages@v6
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: frontend/dist

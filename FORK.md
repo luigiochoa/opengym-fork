@@ -16,6 +16,9 @@ git push -u origin main
 ```
 
 `upstream` sigue en **GitLab** (openGym oficial). Tu fork comercial vive en GitHub.
+
+**Demo en GitHub Pages** (opcional, ya activado): https://luigiochoa.github.io/opengym-fork/  
+Si el workflow de Pages falla en un repo nuevo, activa Pages una vez en *Settings → Pages → Source: GitHub Actions*.
 ## Cumplimiento AGPL (obligatorio)
 
 Si ofreces esta app modificada como servicio en red a un gimnasio (hosting o SaaS):
