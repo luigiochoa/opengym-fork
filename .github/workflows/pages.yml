@@ -1,14 +1,7 @@
-# Publishes the browser-only demo to GitHub Pages: https://duartesantos8.github.io/openGym/
+# Demo estático en GitHub Pages (sin backend). Tras el push, la URL será:
+# https://luigiochoa.github.io/opengym-fork/
 #
-# DORMANT since 2026-08-19, when the GitHub account was suspended. The demo is now built with the
-# same command below and served from the project's own site at https://opengym.duarte-santos.ch/demo/
-# (Vite's base is './', so it drops into a subdirectory unchanged). Kept for the day the account
-# comes back, exactly like the other workflows in this folder.
-#
-# Pages serves static files only, so this build has no backend — VITE_DEMO=1 makes the app
-# boot straight into guest mode with a seeded example history (see frontend/src/lib/demo.js).
-# The exercise images/GIFs (~140 MB) are never committed here; the demo build points at the
-# upstream dataset on jsDelivr instead, pinned to a commit so the CDN can cache it forever.
+# VITE_DEMO=1 → modo invitado con datos de ejemplo. Media de ejercicios vía jsDelivr.
 name: Deploy demo to GitHub Pages
 
 on:
@@ -50,6 +43,8 @@ jobs:
           VITE_IMG_BASE: ${{ env.DATASET }}/images/
           VITE_GIF_BASE: ${{ env.DATASET }}/videos/
       - uses: actions/configure-pages@v6
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: frontend/dist
