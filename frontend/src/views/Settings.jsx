@@ -195,13 +195,12 @@ export default function Settings() {
         subtitle={t('to install openGym as a full-screen app.') + ' ' + (user ? t('Your data syncs with your profile — sign in anywhere to see it.') : t('Guest data stays on this device — export a backup now and then!'))} />
     </Section>}
 
-    <div className="dim small" style={{ textAlign: 'center', marginTop: 4, lineHeight: 1.6 }}>
-      {APP_NAME} · {t('free & open source (AGPL v3)')}<br />
-      <a href={SOURCE_URL} target="_blank" rel="noopener">source code</a>
-      {SOURCE_URL !== REPO ? <> · based on <a href={REPO} target="_blank" rel="noopener">openGym</a></> : null}
-      {' '}· exercise data: hasaneyldrm/exercises-dataset (MIT)<br />
-      exercise images and animations © <a href="https://gymvisual.com/" target="_blank" rel="noopener">Gym visual</a>
-    </div>
+    <Section title={t('About this app')}>
+      <Row icon="info" iconTint="var(--grey)"
+        title={t('Source code & legal notices')}
+        subtitle={t('Open-source license and third-party acknowledgements')}
+        accessory="chevron" onClick={legalNoticesSheet} />
+    </Section>
   </div>
 }
 
@@ -218,6 +217,29 @@ const EFFORT_ROWS = [
 // RIR 2 / RPE 8: the row a working set usually lands on — the anchor the others are read
 // against. Not where the stepper starts; + walks up from the bottom of the scale.
 const EFFORT_TYPICAL = 2
+
+function legalNoticesSheet() {
+  useUI.getState().openSheet(close => <>
+    <h3>{t('Source code & legal notices')}</h3>
+    <div className="muted small" style={{ lineHeight: 1.6, display: 'grid', gap: 12 }}>
+      <div>
+        {APP_NAME} · {t('free & open source (AGPL v3)')}
+      </div>
+      <div>
+        <a href={SOURCE_URL} target="_blank" rel="noopener">{t('Corresponding source code')}</a>
+        {SOURCE_URL !== REPO ? <> · {t('based on')} <a href={REPO} target="_blank" rel="noopener">openGym</a></> : null}
+      </div>
+      <div>
+        {t('Exercise metadata and instructions: hasaneyldrm/exercises-dataset (MIT).')}
+      </div>
+      <div>
+        {t('Exercise images and animations are third-party content.')} ©{' '}
+        <a href="https://gymvisual.com/" target="_blank" rel="noopener">Gym visual</a>
+      </div>
+    </div>
+    <div style={{ height: 8 }} />
+  </>)
+}
 
 function effortHelpSheet() {
   useUI.getState().openSheet(close => <>
