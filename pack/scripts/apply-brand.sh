@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Apply a pack client branding to the repo root (.env + optional logo) for docker compose build.
+# Apply one client's branding without replacing runtime/server configuration.
+#
+# .env is the instance config and survives deploys (domain, port, admins, etc.).
+# branding.json is the brand source of truth. This script only updates RP_NAME
+# and VITE_* branding keys, then copies generated frontend assets.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLIENT="${1:-}"
@@ -15,13 +19,26 @@ if [[ ! -d "$DIR" ]]; then
   exit 1
 fi
 
-cp "$DIR/.env" "$ROOT/.env"
-echo "→ .env desde pack/clients/$CLIENT/.env"
-
 BRAND="$DIR/branding.json"
-if [[ -f "$BRAND" ]] && command -v python3 >/dev/null 2>&1; then
-  # Sync VITE_* from branding.json into .env (keeps RP_ID/ORIGIN/ADMIN from .env)
-  python3 - <<'PY' "$BRAND" "$ROOT/.env"
+if [[ ! -f "$BRAND" ]]; then
+  echo "Falta $BRAND" >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Se necesita python3 para aplicar branding." >&2
+  exit 1
+fi
+
+ENV_FILE="$ROOT/.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+  cp "$ROOT/pack/runtime/local.env.example" "$ENV_FILE"
+  echo "→ .env creado desde pack/runtime/local.env.example"
+else
+  echo "→ .env existente preservado (dominio, puerto, admin y secretos)"
+fi
+
+# Only brand-owned keys are updated. Runtime keys are deliberately untouched.
+python3 - <<'PY' "$BRAND" "$ENV_FILE"
 import json, re, sys
 brand_path, env_path = sys.argv[1], sys.argv[2]
 b = json.load(open(brand_path))
@@ -47,7 +64,6 @@ for k, v in updates.items():
 open(env_path, "w").write(text)
 print("→ .env sincronizado con branding.json")
 PY
-fi
 
 PUBLIC="$ROOT/frontend/public"
 mkdir -p "$PUBLIC"

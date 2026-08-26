@@ -27,11 +27,8 @@ brand = dest / "branding.json"
 b = brand.read_text()
 b = b.replace("CLIENT_ID", cid).replace("Nombre del Gym", title)
 brand.write_text(b)
-env = dest / ".env"
-e = env.read_text().replace("Nombre del Gym", title)
-env.write_text(e)
 print(f"Creado pack/clients/{cid} ({title})")
-print("Edita branding.json, .env y assets/logo.png; luego: ./pack/scripts/apply-brand.sh", cid)
+print("Edita branding.json y assets/logo.svg|png; luego: ./pack/scripts/apply-brand.sh", cid)
 PY
 else
   echo "Creado $DEST — edita a mano CLIENT_ID / Nombre del Gym"

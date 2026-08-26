@@ -4,8 +4,9 @@ media/gif/
 
 # Runtime data — users, passkeys, per-user state, session secret
 data/
+backups/
 
-# Local config (repo root only — pack/clients/*/.env are templates)
+# Runtime instance config (never commit domain/admin/secrets)
 /.env
 
 # Build output / deps
