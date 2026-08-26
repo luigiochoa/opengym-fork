@@ -1,0 +1,13 @@
+{
+  "clientId": "fortachones-gym",
+  "appName": "Fortachones Gym",
+  "shortName": "Fortachones",
+  "appDescription": "Fortachones Gym — Personal Tracker",
+  "tagline": "Conoce tu mejor versión",
+  "accent": "brand",
+  "accentHex": "#67C00A",
+  "useLogo": true,
+  "instagram": "https://www.instagram.com/fortachonesgym/",
+  "sourceUrl": "https://github.com/luigiochoa/opengym-fork",
+  "rpName": "Fortachones Gym"
+}

@@ -3,7 +3,8 @@ import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'r
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { bindUI } from './components/ui.jsx'
-import { ACCENTS } from './lib/format.js'
+import { accentsMap } from './lib/format.js'
+import { BRAND_ACCENT, accentPressed, onAccent } from './lib/brand.js'
 import { setLang, useLang } from './lib/i18n.js'
 import { setNav } from './lib/nav.js'
 import { initBackButton } from './lib/back.js'
@@ -31,7 +32,18 @@ bindUI(useUI)   // lets the shared controls open sheets without importing the st
 function applyPrefs(theme, accent) {
   const de = document.documentElement
   de.dataset.theme = theme === 'light' ? 'light' : 'dark'
-  de.dataset.accent = ACCENTS[accent] ? accent : 'lime'
+  const map = accentsMap(BRAND_ACCENT)
+  const key = map[accent] ? accent : (map.brand ? 'brand' : 'lime')
+  de.dataset.accent = key
+  if (key === 'brand' && BRAND_ACCENT) {
+    de.style.setProperty('--acc', BRAND_ACCENT)
+    de.style.setProperty('--acc-2', accentPressed(BRAND_ACCENT))
+    de.style.setProperty('--on-acc', onAccent(BRAND_ACCENT))
+  } else {
+    de.style.removeProperty('--acc')
+    de.style.removeProperty('--acc-2')
+    de.style.removeProperty('--on-acc')
+  }
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.content = de.dataset.theme === 'light' ? '#f2f2f7' : '#000000'
 }

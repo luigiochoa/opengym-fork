@@ -37,6 +37,7 @@ docker compose up -d --build
 ```
 pack/
   AGPL_COMPLIANCE.md
+  MEDIA_STRATEGY.md       # salida de GIF de terceros → media propia en gym-local
   ENTREGA.md              # checklist de entrega al cliente
   ONE_PAGER.md            # qué vendes / qué no
   ROADMAP_OPS.md          # priorización fase ops
@@ -54,9 +55,11 @@ pack/
 |----------|--------|
 | `VITE_APP_NAME` | Título UI, login, PWA title |
 | `VITE_APP_DESCRIPTION` | meta description |
-| `VITE_DEFAULT_ACCENT` | lime, sky, orange, violet, pink, red, teal, gold |
+| `VITE_DEFAULT_ACCENT` | lime, sky, orange… o `brand` si hay hex |
+| `VITE_BRAND_ACCENT` | Hex exacto de marca (ej. `#67C00A` del isotipo Fortachones) |
 | `VITE_BRAND_TAGLINE` | Subtítulo bajo el nombre en login |
-| `VITE_BRAND_LOGO=1` | Usa `frontend/public/brand-logo.png` |
+| `VITE_BRAND_LOGO=1` | Activa marca en login |
+| `VITE_BRAND_LOGO_SRC` | Ruta del logo (`./brand-logo.svg` preferido, o `.png`) |
 | `VITE_SOURCE_URL` | Enlace “source code” (tu fork AGPL) |
 | `RP_NAME` | Nombre en el prompt de passkey (runtime) |
 

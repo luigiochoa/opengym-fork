@@ -61,6 +61,9 @@ services:
         VITE_SOURCE_URL: ${VITE_SOURCE_URL:-https://gitlab.com/DuarteSantos8/opengym}
         VITE_BRAND_TAGLINE: ${VITE_BRAND_TAGLINE:-}
         VITE_BRAND_LOGO: ${VITE_BRAND_LOGO:-}
+        VITE_BRAND_LOGO_SRC: ${VITE_BRAND_LOGO_SRC:-}
+        VITE_BRAND_ACCENT: ${VITE_BRAND_ACCENT:-}
+        VITE_BRAND_INSTAGRAM: ${VITE_BRAND_INSTAGRAM:-}
     restart: unless-stopped
     depends_on:
       media:

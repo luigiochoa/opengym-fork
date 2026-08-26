@@ -45,3 +45,11 @@ export const localTZ = () => { try { return Intl.DateTimeFormat().resolvedOption
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
 export const ACCENTS = { lime: '#30d158', sky: '#0a84ff', orange: '#ff9f0a', violet: '#bf5af2', pink: '#ff375f', red: '#ff453a', teal: '#40c8e0', gold: '#ffd60a' }
+
+/** Named accents + optional white-label `brand` hex from VITE_BRAND_ACCENT. */
+export function accentsMap(brandHex) {
+  if (brandHex && /^#[0-9a-fA-F]{6}$/.test(brandHex)) {
+    return { brand: brandHex, ...ACCENTS }
+  }
+  return ACCENTS
+}

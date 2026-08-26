@@ -9,6 +9,13 @@ Prioridad fija hasta que el feedback del MVP diga lo contrario. Implementar en *
 3. **Check-in** — registro de asistencia (QR o código), historial por socio  
 4. **Pagos** — pasarela local (definir país), webhooks, estado de cuota  
 
+## Media de ejercicios (antes / junto al tracker propio)
+
+El MVP fork **sigue con los GIF** de openGym (download en runtime; no se redistribuyen en el repo).  
+En `gym-local` sustituir por **SVG propios por categoría + color de marca** — ver [MEDIA_STRATEGY.md](MEDIA_STRATEGY.md).
+
+No bloquear ventas del pack white-label; sí bloquear lanzamiento comercial del tracker propio sin media limpia.
+
 ## Criterios para subir de prioridad un ítem
 
 - ≥3 clientes del pack MVP piden lo mismo de forma espontánea  

@@ -4,7 +4,7 @@ import { webauthnOK, passkeyLogin, passkeyRegister, BIO } from '../lib/api.js'
 import { hasData } from '../store/useStore.js'
 import { t } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
-import { APP_NAME, BRAND_TAGLINE, USE_BRAND_LOGO } from '../lib/brand.js'
+import { APP_NAME, BRAND_TAGLINE, BRAND_LOGO_SRC, BRAND_INSTAGRAM, USE_BRAND_LOGO } from '../lib/brand.js'
 import { guestAllowed } from '../lib/guest.js'
 import { useState, useRef, useEffect } from 'react'
 import Icon from '../components/Icon.jsx'
@@ -57,10 +57,15 @@ export default function Login() {
   }
   const head = <>
     {USE_BRAND_LOGO
-      ? <img src="./brand-logo.png" alt="" width={72} height={72} style={{ margin: '0 auto', display: 'block', borderRadius: 16, objectFit: 'cover' }} />
+      ? <img src={BRAND_LOGO_SRC} alt="" width={96} height={96} style={{ margin: '0 auto', display: 'block', objectFit: 'contain' }} />
       : <div style={{ fontSize: 54, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="dumbbell" /></div>}
     <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-.028em', margin: '10px 0 4px' }}>{APP_NAME}</h1>
     {BRAND_TAGLINE ? <div className="muted small" style={{ marginBottom: 4 }}>{BRAND_TAGLINE}</div> : null}
+    {BRAND_INSTAGRAM ? (
+      <div className="dim small" style={{ marginBottom: 4 }}>
+        <a href={BRAND_INSTAGRAM} target="_blank" rel="noopener" style={{ color: 'var(--acc)' }}>@{BRAND_INSTAGRAM.replace(/\/$/, '').split('/').pop()}</a>
+      </div>
+    ) : null}
   </>
   const wrap = { display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '78vh', textAlign: 'center' }
 
