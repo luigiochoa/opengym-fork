@@ -55,6 +55,7 @@ pack/
 |----------|--------|
 | `VITE_APP_NAME` | Título UI, login, PWA title |
 | `VITE_APP_DESCRIPTION` | meta description |
+| `VITE_DEFAULT_LANG` | Idioma por defecto (`es`, `en`, …) |
 | `VITE_DEFAULT_ACCENT` | lime, sky, orange… o `brand` si hay hex |
 | `VITE_BRAND_ACCENT` | Hex exacto de marca (ej. `#67C00A` del isotipo Fortachones) |
 | `VITE_BRAND_TAGLINE` | Subtítulo bajo el nombre en login |

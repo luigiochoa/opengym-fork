@@ -8,6 +8,7 @@ Fuente de verdad de assets: `branding.json` + `assets/`.
 |----------|--------|
 | Nombre | Fortachones Gym |
 | Tagline app | Conoce tu mejor versión |
+| Idioma | Español (`es`) por defecto |
 | Accent | `#67C00A` (isotipo) |
 | IG | https://www.instagram.com/fortachonesgym/ |
 | Tono visual | Negro + verde lima, isotipo muscular, alto contraste |

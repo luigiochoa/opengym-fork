@@ -4,6 +4,7 @@
   "shortName": "Fortachones",
   "appDescription": "Fortachones Gym — Personal Tracker",
   "tagline": "Conoce tu mejor versión",
+  "lang": "es",
   "accent": "brand",
   "accentHex": "#67C00A",
   "useLogo": true,

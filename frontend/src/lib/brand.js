@@ -3,6 +3,7 @@
 
 export const APP_NAME = import.meta.env.VITE_APP_NAME || 'openGym'
 export const DEFAULT_ACCENT = import.meta.env.VITE_DEFAULT_ACCENT || 'lime'
+export const DEFAULT_LANG = import.meta.env.VITE_DEFAULT_LANG || 'en'
 export const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || 'https://gitlab.com/DuarteSantos8/opengym'
 export const BRAND_TAGLINE = import.meta.env.VITE_BRAND_TAGLINE || ''
 /** Optional Instagram URL (build-time); shown on login when set. */

@@ -5,6 +5,7 @@ const backend = process.env.API_TARGET || 'http://127.0.0.1:3000'
 const media = process.env.MEDIA_TARGET || 'http://127.0.0.1:8888'
 const appName = process.env.VITE_APP_NAME || 'openGym'
 const appDesc = process.env.VITE_APP_DESCRIPTION || 'Personal gym & body weight tracker'
+const appLang = process.env.VITE_DEFAULT_LANG || 'en'
 
 // Optional web analytics (Umami). Injected only when BOTH vars are set at build time,
 // so a plain `npm run build` — and every self-hosted install — stays telemetry-free.
@@ -29,6 +30,7 @@ const brandHtml = {
   name: 'opengym-brand',
   transformIndexHtml(html) {
     return html
+      .replace(/lang="en"/, `lang="${appLang}"`)
       .replace(/<title>[^<]*<\/title>/, `<title>${appName}</title>`)
       .replace(/content="openGym"/g, `content="${appName}"`)
       .replace(/content="Personal gym & body weight tracker"/, `content="${appDesc}"`)

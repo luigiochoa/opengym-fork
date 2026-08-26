@@ -58,6 +58,7 @@ services:
         VITE_APP_NAME: ${VITE_APP_NAME:-openGym}
         VITE_APP_DESCRIPTION: ${VITE_APP_DESCRIPTION:-Personal gym & body weight tracker}
         VITE_DEFAULT_ACCENT: ${VITE_DEFAULT_ACCENT:-lime}
+        VITE_DEFAULT_LANG: ${VITE_DEFAULT_LANG:-en}
         VITE_SOURCE_URL: ${VITE_SOURCE_URL:-https://gitlab.com/DuarteSantos8/opengym}
         VITE_BRAND_TAGLINE: ${VITE_BRAND_TAGLINE:-}
         VITE_BRAND_LOGO: ${VITE_BRAND_LOGO:-}

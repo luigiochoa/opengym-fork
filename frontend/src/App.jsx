@@ -4,7 +4,7 @@ import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { bindUI } from './components/ui.jsx'
 import { accentsMap } from './lib/format.js'
-import { BRAND_ACCENT, accentPressed, onAccent } from './lib/brand.js'
+import { BRAND_ACCENT, DEFAULT_LANG, accentPressed, onAccent } from './lib/brand.js'
 import { setLang, useLang } from './lib/i18n.js'
 import { setNav } from './lib/nav.js'
 import { initBackButton } from './lib/back.js'
@@ -56,8 +56,18 @@ function Shell() {
   const langV = useLang()   // re-renders the whole shell when the language (pack) changes
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => { applyPrefs(S.theme, S.accent) }, [S.theme, S.accent])
-  useEffect(() => { setLang(S.lang || 'en') }, [S.lang])
-  useEffect(() => { document.documentElement.lang = S.lang || 'en' }, [langV, S.lang])
+  useEffect(() => { setLang(S.lang || DEFAULT_LANG) }, [S.lang])
+  useEffect(() => { document.documentElement.lang = S.lang || DEFAULT_LANG }, [langV, S.lang])
+  // White-label: one-time migrate from English default to brand language (e.g. es).
+  useEffect(() => {
+    if (!DEFAULT_LANG || DEFAULT_LANG === 'en') return
+    const flag = 'gym_wl_lang_' + DEFAULT_LANG
+    if (localStorage.getItem(flag)) return
+    if ((S.lang || 'en') === 'en') {
+      useStore.getState().update(s => { s.lang = DEFAULT_LANG })
+    }
+    localStorage.setItem(flag, '1')
+  }, [S.lang])
   // every tab/route change starts at the top of the page
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
   // bound to the workout, not to the route — checking Stats mid-session keeps the screen on

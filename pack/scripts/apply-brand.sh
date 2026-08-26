@@ -30,6 +30,7 @@ updates = {
   "VITE_APP_NAME": b.get("appName"),
   "VITE_APP_DESCRIPTION": b.get("appDescription"),
   "VITE_DEFAULT_ACCENT": b.get("accent"),
+  "VITE_DEFAULT_LANG": b.get("lang") or "en",
   "VITE_BRAND_ACCENT": b.get("accentHex") or "",
   "VITE_BRAND_TAGLINE": b.get("tagline") or "",
   "VITE_BRAND_INSTAGRAM": b.get("instagram") or "",
