@@ -9,6 +9,7 @@ import {
   generateAuthenticationOptions, verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import webpush from 'web-push';
+import { createInviteCode, normalizeInvitePrefix } from './invite-code.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -19,6 +20,7 @@ const RP_NAME = process.env.RP_NAME || 'openGym';
 // code the admin generates. Both default off so a fresh self-hosted instance stays open.
 const ADMIN_UIDS = (process.env.ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const INVITE_ONLY = /^(1|true|yes|on)$/i.test(process.env.INVITE_ONLY || '');
+const INVITE_PREFIX = normalizeInvitePrefix(process.env.INVITE_PREFIX);
 // Guest mode ("Continue without account") keeps everything in the browser and never touches this
 // server — but on an instance meant for a known set of people, an entrance nobody can walk back
 // out of is still the wrong front door (#42). Default ON, so existing instances are unchanged;
@@ -665,12 +667,11 @@ const routes = {
   'POST /api/admin/invites/new': async (req, res) => {
     const admin = requireAdmin(req, res); if (!admin) return;
     const body = await readBody(req);
-    let code;
-    // 16 hex chars = 64 bits, up from 8 chars / 32 bits. The app has no rate limiting by design
-    // (that's the reverse proxy's job) and /api/register/options tells a caller whether a code is
-    // good, so the code itself has to be the thing that isn't worth guessing. Codes already in
-    // db.json keep working — validation is an exact string compare, never a length or format check.
-    do { code = crypto.randomBytes(8).toString('hex').toUpperCase(); } while (db.invites.some(i => i.code === code));
+    // The visible number is sequential, while the random suffix remains the security boundary.
+    // db.inviteSeq prevents a revoked last code from causing its number to be reused.
+    const generated = createInviteCode(db.invites, INVITE_PREFIX, db.inviteSeq);
+    const code = generated.code;
+    if (generated.sequence !== null) db.inviteSeq = generated.sequence;
     const invite = { code, note: String(body.note || '').slice(0, 60), createdBy: admin.id, created: new Date().toISOString() };
     db.invites.push(invite);
     saveDb();

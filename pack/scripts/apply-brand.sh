@@ -2,8 +2,8 @@
 # Apply one client's branding without replacing runtime/server configuration.
 #
 # .env is the instance config and survives deploys (domain, port, admins, etc.).
-# branding.json is the brand source of truth. This script only updates RP_NAME
-# and VITE_* branding keys, then copies generated frontend assets.
+# branding.json is the brand source of truth. This script only updates RP_NAME,
+# INVITE_PREFIX and VITE_* branding keys, then copies generated frontend assets.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CLIENT="${1:-}"
@@ -44,6 +44,7 @@ brand_path, env_path = sys.argv[1], sys.argv[2]
 b = json.load(open(brand_path))
 updates = {
   "RP_NAME": b.get("rpName") or b.get("appName"),
+  "INVITE_PREFIX": b.get("invitePrefix") or "",
   "VITE_APP_NAME": b.get("appName"),
   "VITE_APP_DESCRIPTION": b.get("appDescription"),
   "VITE_DEFAULT_ACCENT": b.get("accent"),

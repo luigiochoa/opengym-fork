@@ -10,5 +10,6 @@
   "useLogo": true,
   "instagram": "https://www.instagram.com/fortachonesgym/",
   "sourceUrl": "https://github.com/luigiochoa/opengym-fork",
-  "rpName": "Fortachones Gym"
+  "rpName": "Fortachones Gym",
+  "invitePrefix": "FORTA"
 }

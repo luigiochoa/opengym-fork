@@ -177,6 +177,7 @@ All via `.env` (see `.env.example`):
 | `SESSION_DAYS`| How long a sign-in lasts, in days                    | `90`                    |
 | `ADMIN_UIDS`  | User ids that get the admin dashboard (comma-separated) | *(none)*             |
 | `INVITE_ONLY` | Require an invite code to create a profile           | *(off)*                 |
+| `INVITE_PREFIX` | Prefix for secure sequential invite codes, e.g. `FORTA-002-…` | *(random codes)* |
 | `ALLOW_GUEST` | Offer "Continue without account" — set `0` to require a profile | *(on)*       |
 | `AUDIT_LOG`   | Record sign-ins and admin actions — set `0` to record nothing | *(on)*        |
 | `AUDIT_MAX`   | Events kept in the activity log; `0` for no limit    | `5000`                  |
