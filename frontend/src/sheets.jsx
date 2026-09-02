@@ -8,6 +8,7 @@ import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
 import { starterRoutines } from './lib/starter.js'
+import { teamSarmientoLegsRoutine, TEAM_SARMIENTO_HIP_THRUST } from './lib/team-sarmiento-legs.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
@@ -52,6 +53,19 @@ export function loadStarterPlan() {
     st.week[1] = push.id; st.week[3] = pull.id; st.week[5] = legs.id
   })
   toast(t('Starter plan loaded — Mon Push · Wed Pull · Fri Legs'))
+}
+
+export function loadTeamSarmientoLegsDay() {
+  const routine = teamSarmientoLegsRoutine()
+  update(st => {
+    st.customEx = st.customEx || []
+    const hipIdx = st.customEx.findIndex(c => c.id === TEAM_SARMIENTO_HIP_THRUST.id)
+    if (hipIdx < 0) st.customEx.push({ ...TEAM_SARMIENTO_HIP_THRUST })
+    else st.customEx[hipIdx] = { ...st.customEx[hipIdx], ...TEAM_SARMIENTO_HIP_THRUST }
+    st.routines.push(routine)
+    if (!st.week[5]) st.week[5] = routine.id
+  })
+  toast(t('Team Sarmiento legs day loaded — assigned to Friday if empty'))
 }
 
 /* ============================ weight picker (shared: body weight + goal) ============================ */

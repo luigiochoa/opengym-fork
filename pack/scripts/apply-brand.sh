@@ -130,5 +130,19 @@ for size in 180 512; do
   fi
 done
 
+# Custom exercise media (e.g. ts-hip-thrust.gif) — served from /gif/ and /img/ like EXDB.
+EX_ASSETS="$DIR/assets/exercises"
+if [[ -d "$EX_ASSETS" ]] && ls "$EX_ASSETS"/*.gif >/dev/null 2>&1; then
+  mkdir -p "$PUBLIC/gif" "$PUBLIC/img" "$ROOT/media/gif" "$ROOT/media/img"
+  for f in "$EX_ASSETS"/*.gif; do
+    base="$(basename "$f")"
+    cp "$f" "$PUBLIC/gif/$base"
+    cp "$f" "$PUBLIC/img/$base"
+    cp "$f" "$ROOT/media/gif/$base"
+    cp "$f" "$ROOT/media/img/$base"
+    echo "→ ejercicio custom: $base → gif/ + img/"
+  done
+fi
+
 echo "Listo. Rebuild: docker compose up -d --build"
 echo "Fuente AGPL: revisa VITE_SOURCE_URL en .env y pack/AGPL_COMPLIANCE.md"

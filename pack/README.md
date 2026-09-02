@@ -1,5 +1,8 @@
 # Pack inicial — openGym fork white-label
 
+> **Workspace activo:** Fortachones → https://fortachones.luigiochoa.com · cliente `fortachones-gym`.  
+> El monorepo propio `gym-local` está **en pausa**.
+
 Empaqueta una instancia por gimnasio: marca, dominio, invite-only, checklist de entrega.
 
 Arquitectura: **un core común + configuración por cliente**, no un fork de

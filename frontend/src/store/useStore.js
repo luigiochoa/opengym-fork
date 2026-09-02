@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../lib/api.js'
 import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
+import { patchTeamSarmientoCustomEx } from '../lib/team-sarmiento-legs.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { DEFAULT_ACCENT, DEFAULT_LANG } from '../lib/brand.js'
 import { guestAllowed } from '../lib/guest.js'
@@ -24,7 +25,11 @@ const clone = o => JSON.parse(JSON.stringify(o))
 function loadState() {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return Object.assign(clone(DEF), JSON.parse(raw))
+    if (raw) {
+      const s = Object.assign(clone(DEF), JSON.parse(raw))
+      s.customEx = patchTeamSarmientoCustomEx(s.customEx)
+      return s
+    }
   } catch (e) { /* ignore */ }
   return clone(DEF)
 }
