@@ -30,13 +30,20 @@ export function teamSarmientoLegsRoutine() {
   }
 }
 
-/** Merge bundled media into an existing custom ex (e.g. after adding a GIF). */
-export function patchTeamSarmientoCustomEx(customEx) {
-  if (!customEx?.length) return customEx
-  const i = customEx.findIndex(c => c.id === TEAM_SARMIENTO_HIP_THRUST.id)
-  if (i < 0) return customEx
-  if (customEx[i].gif === TEAM_SARMIENTO_HIP_THRUST.gif) return customEx
-  const next = customEx.slice()
-  next[i] = { ...next[i], ...TEAM_SARMIENTO_HIP_THRUST }
-  return next
+/** Ensure hip thrust custom ex + bundled GIF survive server sync and older local state. */
+export function patchTeamSarmientoState(S) {
+  if (!S) return S
+  const inRoutines = (S.routines || []).some(r =>
+    (r.ex || []).some(e => e.id === TEAM_SARMIENTO_HIP_THRUST.id))
+  const inCustoms = (S.customEx || []).some(c => c.id === TEAM_SARMIENTO_HIP_THRUST.id)
+  if (!inRoutines && !inCustoms) return S
+
+  S.customEx = S.customEx || []
+  const i = S.customEx.findIndex(c => c.id === TEAM_SARMIENTO_HIP_THRUST.id)
+  if (i < 0) {
+    S.customEx.push({ ...TEAM_SARMIENTO_HIP_THRUST })
+  } else if (!S.customEx[i].gif) {
+    S.customEx[i] = { ...S.customEx[i], ...TEAM_SARMIENTO_HIP_THRUST }
+  }
+  return S
 }

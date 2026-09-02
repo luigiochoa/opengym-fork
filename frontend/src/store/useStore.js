@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { api } from '../lib/api.js'
 import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
-import { patchTeamSarmientoCustomEx } from '../lib/team-sarmiento-legs.js'
+import { patchTeamSarmientoState } from '../lib/team-sarmiento-legs.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { DEFAULT_ACCENT, DEFAULT_LANG } from '../lib/brand.js'
 import { guestAllowed } from '../lib/guest.js'
@@ -26,9 +26,7 @@ function loadState() {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
-      const s = Object.assign(clone(DEF), JSON.parse(raw))
-      s.customEx = patchTeamSarmientoCustomEx(s.customEx)
-      return s
+      return patchTeamSarmientoState(Object.assign(clone(DEF), JSON.parse(raw)))
     }
   } catch (e) { /* ignore */ }
   return clone(DEF)
@@ -48,6 +46,7 @@ export const useStore = create((set, get) => {
   }
 
   const persist = (S, push = true) => {
+    patchTeamSarmientoState(S)
     S._ts = Date.now()
     registerCustom(S.customEx)
     localStorage.setItem(KEY, JSON.stringify(S))

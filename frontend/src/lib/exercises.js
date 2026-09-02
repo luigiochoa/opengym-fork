@@ -1,5 +1,16 @@
 import { EXDB } from './exercises-data.js'
 import { t } from './i18n-core.js'
+import { TEAM_SARMIENTO_HIP_THRUST } from './team-sarmiento-legs.js'
+
+const BUNDLED_CUSTOM = {
+  [TEAM_SARMIENTO_HIP_THRUST.id]: TEAM_SARMIENTO_HIP_THRUST,
+}
+
+const withBundledMedia = ex => {
+  const b = BUNDLED_CUSTOM[ex?.id]
+  if (!b?.gif) return ex
+  return { ...b, ...ex, gif: b.gif, img: b.img }
+}
 
 export { EXDB }
 
@@ -39,9 +50,9 @@ export function equipmentOf(list) {
 // merged into the id index here so every EXIDX[id] lookup keeps working unchanged.
 let customIds = []
 export function registerCustom(list) {
-  customIds.forEach(id => delete EXIDX[id])
+  customIds.forEach(id => { if (!BUNDLED_CUSTOM[id]) delete EXIDX[id] })
   customIds = (list || []).map(e => e.id)
-  ;(list || []).forEach(e => { EXIDX[e.id] = e })
+  ;(list || []).forEach(e => { EXIDX[e.id] = withBundledMedia(e) })
 }
 // Full searchable catalogue — customs first so your own exercises are easy to find.
 export const allExercises = st => [...(st.customEx || []), ...EXDB]
@@ -75,5 +86,5 @@ export const isBodyweightEq = idOrEx =>
 // a custom exercise deleted on another device before the sync arrived — still has to
 // render. A placeholder keeps it visible (and removable) instead of taking the whole view
 // down on the first `ex.n`.
-export const exOr = id => EXIDX[id] ||
+export const exOr = id => withBundledMedia(EXIDX[id]) || BUNDLED_CUSTOM[id] ||
   { id, n: t('Unknown exercise'), bp: '', tg: '', eq: '', sm: [], st: [], missing: true }
