@@ -35,6 +35,7 @@ export const smOf = ex => {
 
 export const EXIDX = {}
 EXDB.forEach(e => { EXIDX[e.id] = e })
+Object.values(BUNDLED_CUSTOM).forEach(e => { EXIDX[e.id] = e })
 export const BODYPARTS = [...new Set(EXDB.map(e => e.bp))].sort()
 
 // Equipment options present in a given list of exercises, most common first (issue #6).
@@ -52,10 +53,26 @@ let customIds = []
 export function registerCustom(list) {
   customIds.forEach(id => { if (!BUNDLED_CUSTOM[id]) delete EXIDX[id] })
   customIds = (list || []).map(e => e.id)
+  Object.values(BUNDLED_CUSTOM).forEach(e => { EXIDX[e.id] = e })
   ;(list || []).forEach(e => { EXIDX[e.id] = withBundledMedia(e) })
 }
-// Full searchable catalogue — customs first so your own exercises are easy to find.
-export const allExercises = st => [...(st.customEx || []), ...EXDB]
+// Full searchable catalogue — bundled + user customs first so they are easy to find.
+export const allExercises = st => {
+  const seen = new Set()
+  const customs = []
+  for (const e of [...Object.values(BUNDLED_CUSTOM), ...(st?.customEx || [])]) {
+    if (!e?.id || seen.has(e.id)) continue
+    seen.add(e.id)
+    customs.push(withBundledMedia(e))
+  }
+  return [...customs, ...EXDB]
+}
+
+export function matchesExerciseQuery(e, ql) {
+  if (!ql) return true
+  const hay = [e.n, e.tg, e.eq, e.desc].filter(Boolean).join(' ').toLowerCase()
+  return hay.includes(ql)
+}
 
 // Media normally sits next to the app (img/ and gif/, mounted into the web container).
 // A build can point them somewhere else — the demo build pulls them off a CDN instead of

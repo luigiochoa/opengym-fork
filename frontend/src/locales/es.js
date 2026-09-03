@@ -217,6 +217,7 @@ export default {
   'Starter plan loaded — Mon Push · Wed Pull · Fri Legs': 'Plan inicial cargado — Lun Push · Mié Pull · Vie Piernas',
   'Load Team Sarmiento Legs Day': 'Cargar Legs Day · Team Sarmiento',
   'Team Sarmiento legs day loaded — assigned to Friday if empty': 'Legs Day Team Sarmiento cargado — asignado al viernes si estaba libre',
+  'Team Sarmiento legs day is already in your plan': 'Legs Day Team Sarmiento ya está en tu plan',
   'Coach legs template — 6 exercises': 'Rutina de piernas del coach — 6 ejercicios',
   'Enter a name': 'Introduce un nombre',
   'Profile created — data from this device moved into it': 'Perfil creado — los datos de este dispositivo se han movido a él',

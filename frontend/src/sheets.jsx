@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
-import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf, smOf } from './lib/exercises.js'
+import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf, smOf, matchesExerciseQuery } from './lib/exercises.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
 import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps, workSetsDone } from './lib/history.js'
 import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
 import { starterRoutines } from './lib/starter.js'
-import { teamSarmientoLegsRoutine, TEAM_SARMIENTO_HIP_THRUST } from './lib/team-sarmiento-legs.js'
+import { teamSarmientoLegsRoutine, TEAM_SARMIENTO_HIP_THRUST, hasTeamSarmientoLegs } from './lib/team-sarmiento-legs.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
@@ -56,11 +56,15 @@ export function loadStarterPlan() {
 }
 
 export function loadTeamSarmientoLegsDay() {
+  if (hasTeamSarmientoLegs(S())) {
+    toast(t('Team Sarmiento legs day is already in your plan'))
+    return
+  }
   const routine = teamSarmientoLegsRoutine()
   update(st => {
     st.customEx = st.customEx || []
     const hipIdx = st.customEx.findIndex(c => c.id === TEAM_SARMIENTO_HIP_THRUST.id)
-    if (hipIdx < 0) st.customEx.push({ ...TEAM_SARMIENTO_HIP_THRUST })
+    if (hipIdx < 0) st.customEx.unshift({ ...TEAM_SARMIENTO_HIP_THRUST })
     else st.customEx[hipIdx] = { ...st.customEx[hipIdx], ...TEAM_SARMIENTO_HIP_THRUST }
     st.routines.push(routine)
     if (!st.week[5]) st.week[5] = routine.id
@@ -440,7 +444,7 @@ function ExercisePicker({ onPick, close }) {
   const all = allExercises(st)
   let base = all.filter(e =>
     (bp === '★' ? usage[e.id] : (!bp || e.bp === bp)) &&
-    (!ql || e.n.toLowerCase().includes(ql) || e.tg.includes(ql) || e.eq.includes(ql) || (e.desc || '').toLowerCase().includes(ql)))
+    matchesExerciseQuery(e, ql))
   if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || (a.n < b.n ? -1 : 1))
   const eqOpts = equipmentOf(base)
   // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
