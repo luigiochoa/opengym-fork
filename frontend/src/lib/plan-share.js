@@ -12,6 +12,7 @@ import { EXIDX, isBodyweightEq } from './exercises.js'
 import { modeOf, fmtSec, isBw, isPerSide, sideReps } from './history.js'
 import { uid, todayISO, DAYN, fmtNum, exCount } from './format.js'
 import { t } from './i18n-core.js'
+import { APP_NAME, BRAND_ACCENT, BRAND_INSTAGRAM, BRAND_LOGO_SRC, BRAND_TAGLINE, SOURCE_URL, USE_BRAND_LOGO } from './brand.js'
 
 const PLAN_FMT = 1
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]   // Mon-first, matching the Plan screen
@@ -196,6 +197,27 @@ function weekHTML(S) {
   return `<div class="week">${rows}</div>`
 }
 
+function igHandle() {
+  const u = (BRAND_INSTAGRAM || '').replace(/\/$/, '')
+  return u ? u.split('/').pop() : ''
+}
+
+function printLogoHref() {
+  if (!USE_BRAND_LOGO || typeof location === 'undefined') return ''
+  try { return new URL(BRAND_LOGO_SRC, location.origin + '/').href } catch { return '' }
+}
+
+function printFooter() {
+  const handle = igHandle()
+  const parts = [t('Made with {0}', APP_NAME)]
+  if (handle) parts.push('@' + handle)
+  const line = esc(parts.join(' · '))
+  const fork = APP_NAME && APP_NAME !== 'openGym'
+    ? `<div class="src">${esc(t('based on'))} openGym${SOURCE_URL ? ' · ' + esc(SOURCE_URL.replace(/^https?:\/\//, '')) : ''}</div>`
+    : ''
+  return `${line}${fork}`
+}
+
 /** Full self-contained HTML for the print/PDF view. */
 export function planPrintHTML(S, owner) {
   const unit = S.unit || 'kg'
@@ -203,9 +225,11 @@ export function planPrintHTML(S, owner) {
   const body = routines.length
     ? routines.map(r => routineHTML(r, unit)).join('')
     : `<p class="none">${esc(t('No routines yet.'))}</p>`
-  const sub = [owner, todayISO()].filter(Boolean).map(esc).join(' · ')
+  const sub = [owner, BRAND_TAGLINE, todayISO()].filter(Boolean).map(esc).join(' · ')
+  const accent = BRAND_ACCENT || '#6a7a3a'
+  const logo = printLogoHref()
   return `<!doctype html><html><head><meta charset="utf-8">
-<title>${esc(t('Weekly Training Plan'))}</title>
+<title>${esc(APP_NAME)} · ${esc(t('Weekly Training Plan'))}</title>
 <style>
   @page { margin: 16mm 15mm; }
   * { box-sizing: border-box; }
@@ -217,7 +241,9 @@ export function planPrintHTML(S, owner) {
   }
   .doc { max-width: 720px; margin: 0 auto; }
   header { border-bottom: 2px solid #16181d; padding-bottom: 12px; margin-bottom: 20px; }
-  header .kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #6a7a3a; font-weight: 700; }
+  header .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  header .brand img { height: 40px; width: auto; object-fit: contain; }
+  header .kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: ${esc(accent)}; font-weight: 700; }
   header h1 { font-size: 27px; letter-spacing: -.02em; margin: 3px 0 0; }
   header .sub { color: #6b7180; font-size: 13px; margin-top: 4px; }
 
@@ -243,15 +269,19 @@ export function planPrintHTML(S, owner) {
   .ex-s { color: #3d424e; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ex.empty, .none { color: #a2a8b6; }
 
-  .ss { break-inside: avoid; page-break-inside: avoid; border-left: 3px solid #cfe08a; padding-left: 12px; margin: 4px 0; }
-  .ss-tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #6a7a3a; font-weight: 700; padding-top: 4px; }
+  .ss { break-inside: avoid; page-break-inside: avoid; border-left: 3px solid ${esc(accent)}; padding-left: 12px; margin: 4px 0; }
+  .ss-tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: ${esc(accent)}; font-weight: 700; padding-top: 4px; }
   .ss .ex:first-of-type { padding-top: 2px; }
 
   footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #eef0f4; color: #a2a8b6; font-size: 11px; text-align: center; }
+  footer .src { margin-top: 4px; font-size: 10px; color: #c0c4ce; }
 </style></head>
 <body><div class="doc">
   <header>
-    <div class="kicker">openGym</div>
+    <div class="brand">
+      ${logo ? `<img src="${esc(logo)}" alt="">` : ''}
+      <div class="kicker">${esc(APP_NAME)}</div>
+    </div>
     <h1>${esc(t('Weekly Training Plan'))}</h1>
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </header>
@@ -259,7 +289,7 @@ export function planPrintHTML(S, owner) {
   ${weekHTML(S)}
   <h3 class="block">${esc(t('Routines'))}</h3>
   ${body}
-  <footer>${esc(t('Made with openGym'))} · opengym.duarte-santos.ch</footer>
+  <footer>${printFooter()}</footer>
 </div></body></html>`
 }
 

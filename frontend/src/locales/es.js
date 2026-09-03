@@ -476,6 +476,7 @@ export default {
   'Unknown exercise': 'Ejercicio desconocido',
   'Weekly Training Plan': 'Plan de entrenamiento semanal',
   'Made with openGym': 'Hecho con openGym',
+  'Made with {0}': 'Hecho con {0}',
   'Something went wrong': 'Algo ha salido mal',
   'This screen could not be drawn. Your data is safe on this device.': 'Esta pantalla no se ha podido dibujar. Tus datos siguen a salvo en este dispositivo.',
   'Reload openGym': 'Recargar openGym',
