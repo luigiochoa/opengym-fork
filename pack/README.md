@@ -41,6 +41,7 @@ docker compose up -d --build
 | Tracker de socios (rutinas, series, peso) | Membresías / pagos |
 | Marca: nombre, tagline, acento, logo opcional | Clases y reservas |
 | Invite-only + admin del dueño | Check-in / torniquete |
+| Control manual de pagos por alumno (POC entrenador) | Cobros online / facturación |
 | 1 instancia Docker por gym | Multi-tenant SaaS cerrado |
 
 ## Estructura

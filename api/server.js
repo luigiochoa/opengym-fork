@@ -1371,6 +1371,8 @@ function removeAccount(u) {
   db.users = db.users.filter(x => x.id !== u.id);
   db.creds = (db.creds || []).filter(c => c.userId !== u.id);
   db.subs = (db.subs || []).filter(x => x.userId !== u.id);
+  if (db.trainerPayments) db.trainerPayments = db.trainerPayments.filter(p => p.userId !== u.id);
+  if (db.trainerAssignments) delete db.trainerAssignments[u.id];
   dropDeviceLinks(db, u.id);
   presence.delete(u.id);
   // The training history and any Coach credential of theirs, both outside db.json.

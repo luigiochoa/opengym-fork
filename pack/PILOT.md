@@ -39,6 +39,20 @@ La actualización incluye medios de ejercicios con licencia separada. Conservar 
 - El alumno registra su sesión en el tracker habitual. En Inicio, toca **Comentar al entrenador** (o **Tu comentario**) para escribir desde un panel y enviarlo.
 - El entrenador ve última sesión, número de entrenamientos y estado del plan en la lista. Al tocar un alumno se abre su ficha con el comentario y las series registradas.
 
+## Control manual de pagos
+
+**Mis alumnos → tocar un alumno → Control de pagos → Registrar pago**.
+
+El entrenador registra fecha de pago, inicio de cobertura y próxima renovación. El monto, método y nota son opcionales; se pueden registrar pagos sin monto. Los períodos sugeridos son un mes calendario, 15 días o 7 días, y la fecha se puede personalizar. Los meses cortos respetan su último día (31 de enero → 28/29 de febrero). Si el alumno paga antes de tiempo, el formulario propone comenzar la cobertura al finalizar el período actual.
+
+Los estados son **Sin registro**, **Al día**, **Por vencer** (próximos siete días), **Vence hoy**, **Vencido** y **Programado**. La fecha de renovación es el día en que toca el siguiente pago. Un alumno sin registros no se considera vencido. Una cobertura pagada para el futuro no oculta un hueco vencido anterior. Las coberturas contiguas pagadas por adelantado se unen para calcular la próxima renovación.
+
+En la lista se puede filtrar **Por renovar**. El resumen se actualiza al guardar, volver a la pantalla y mientras permanece visible. El día se calcula en el servidor con `TRAINER_TIMEZONE` (predeterminado `America/Caracas`). Mantener esta zona acorde al lugar de operación del entrenador.
+
+El historial permanece en el servidor junto con los respaldos de la instancia. Tocar un pago permite **Anular registro**, con confirmación y recálculo de la renovación. La anulación conserva el registro; para corregir fechas o montos se anula y se registra la versión correcta. Los reintentos del mismo envío no crean duplicados.
+
+Este control es privado del propietario de la instancia: otros administradores y alumnos no pueden consultar ni modificar los pagos. No procesa cobros, no envía recordatorios automáticos ni bloquea el acceso al entrenamiento por vencimiento. No suma importes de monedas diferentes.
+
 ## Validación manual antes de invitar alumnos reales
 
 Usar dos perfiles de prueba distintos y dos sesiones de navegador:

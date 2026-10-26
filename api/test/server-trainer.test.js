@@ -11,6 +11,7 @@ import { boundPort } from './helpers.mjs';
 const API = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const owner = '11111111-1111-4111-8111-111111111111';
 const pupil = '22222222-2222-4222-8222-222222222222';
+const secondAdmin = '44444444-4444-4444-8444-444444444444';
 const other = '33333333-3333-4333-8333-333333333333';
 const secret = crypto.randomBytes(32).toString('hex');
 function cookie(uid) {
@@ -21,7 +22,7 @@ async function start(t, enabled = true) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gym-trainer-'));
   fs.mkdirSync(path.join(dir, 'users'));
   fs.writeFileSync(path.join(dir, 'secret'), secret);
-  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ users: [{ id: owner, name: 'Entrenador', admin: true, owner: true }, { id: pupil, name: 'Alumno' }, { id: other, name: 'Otra alumna' }], creds: [], subs: [], invites: [] }));
+  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ users: [{ id: owner, name: 'Entrenador', admin: true, owner: true }, { id: pupil, name: 'Alumno' }, { id: other, name: 'Otra alumna' }, { id: secondAdmin, name: 'Otro administrador', admin: true }], creds: [], subs: [], invites: [] }));
   const trainerState = { unit: 'kg', routines: [{ id: 'routine-1', name: 'Piernas', ex: [{ id: '0598', sets: 3, reps: 10, weight: 60 }] }], workouts: [] };
   fs.writeFileSync(path.join(dir, 'state-' + owner + '.json'), JSON.stringify(trainerState));
   let log = '';
@@ -71,4 +72,54 @@ test('trainer endpoints remain disabled unless explicitly enabled', async t => {
   const h = await start(t, false);
   assert.equal((await h.req('GET', '/api/trainer/pupils', owner)).status, 404);
   assert.equal((await h.req('GET', '/api/config')).body.trainer_pilot, undefined);
+});
+
+
+test('manual payments: owner-only, validated, retry-safe, private and reversible through voiding', async t => {
+  const h = await start(t);
+  const body = { requestId: crypto.randomUUID(), userId: pupil, paidOn: '2000-01-01', validFrom: '2000-01-01', nextDueOn: '2099-01-01', amountMinor: 3050, currency: 'USD', method: 'cash', note: 'Prueba privada' };
+  const url = '/api/trainer/payments?userId=' + pupil;
+  assert.equal((await h.req('GET', url)).status, 401);
+  for (const uid of [pupil, other, secondAdmin]) {
+    assert.equal((await h.req('GET', url, uid)).status, 403);
+    assert.equal((await h.req('POST', '/api/trainer/payments', uid, body)).status, 403);
+    assert.equal((await h.req('POST', '/api/trainer/payments/void', uid, { id: 'any' })).status, 403);
+  }
+  const untouched = await h.req('GET', url, owner);
+  assert.equal(untouched.body.summary.status, 'none');
+  assert.equal(untouched.body.payments.length, 0);
+  const response = await h.req('POST', '/api/trainer/payments', owner, body);
+  assert.equal(response.status, 201);
+  const id = response.body.payment.id;
+  assert.equal(response.body.summary.status, 'current');
+  assert.equal((await h.req('POST', '/api/trainer/payments', owner, body)).status, 200);
+  assert.equal((await h.req('POST', '/api/trainer/payments', owner, { ...body, amountMinor: 3100 })).status, 409);
+  const history = await h.req('GET', url, owner);
+  assert.equal(history.body.payments.length, 1);
+  assert.equal(history.body.payments[0].amountMinor, 3050);
+  const overview = await h.req('GET', '/api/trainer/pupils', owner);
+  assert.equal(overview.body.pupils.find(p => p.id === pupil).billing.nextDueOn, '2099-01-01');
+  assert.equal(overview.body.pupils.find(p => p.id === other).billing.status, 'none');
+  const ownData = await h.req('GET', '/api/data', pupil);
+  assert.equal(JSON.stringify(ownData.body).includes('Prueba privada'), false);
+  for (const patch of [{ paidOn: '2026-02-30' }, { paidOn: '2099-01-01' }, { nextDueOn: body.validFrom }, { amountMinor: -20 }, { amountMinor: 1.5 }, { currency: 'usd' }, { note: 'x'.repeat(501) }]) {
+    assert.equal((await h.req('POST', '/api/trainer/payments', owner, { ...body, requestId: crypto.randomUUID(), ...patch })).status, 400);
+  }
+  assert.equal((await h.req('POST', '/api/trainer/payments', owner, { ...body, requestId: crypto.randomUUID(), userId: owner })).status, 404);
+  const duplicate = { ...body, requestId: crypto.randomUUID(), userId: other, amountMinor: null };
+  const parallel = await Promise.all([h.req('POST', '/api/trainer/payments', owner, duplicate), h.req('POST', '/api/trainer/payments', owner, duplicate)]);
+  assert.deepEqual(parallel.map(r => r.status).sort(), [200, 201]);
+  assert.equal((await h.req('GET', '/api/trainer/payments?userId=' + other, owner)).body.payments.length, 1);
+  assert.equal((await h.req('POST', '/api/trainer/payments/void', owner, { id })).status, 200);
+  assert.equal((await h.req('POST', '/api/trainer/payments/void', owner, { id })).status, 200);
+  const after = await h.req('GET', url, owner);
+  assert.equal(after.body.summary.status, 'none');
+  assert.equal(after.body.payments.length, 1);
+  assert.ok(after.body.payments[0].voidedAt);
+  const persisted = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json'), 'utf8'));
+  assert.equal(persisted.trainerPayments.length, 2);
+  assert.ok(persisted.trainerPayments.find(p => p.id === id).voidedAt);
+  assert.equal((await h.req('POST', '/api/admin/user/delete', owner, { id: pupil })).status, 200);
+  const removed = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json'), 'utf8'));
+  assert.equal(removed.trainerPayments.some(p => p.userId === pupil), false);
 });

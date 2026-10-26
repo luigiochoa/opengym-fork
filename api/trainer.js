@@ -1,6 +1,7 @@
 // Human-trainer pilot: owner-only assignment, distinct from the optional AI Coach.
 // Assignments live in db.json, never overwrite a pupil's synced workout document.
 import crypto from 'node:crypto';
+import { paymentSummary, trainerToday, validateManualPayment, PaymentValidationError } from './trainer-payments.js';
 
 export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit }) {
   const routes = {};
@@ -10,6 +11,12 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     const user = readSession(req);
     if (!user) json(res, 401, { error: 'not signed in' });
     return user;
+  };
+  const payments = () => Array.isArray(db.trainerPayments) ? db.trainerPayments : [];
+  const paymentsFor = userId => payments().filter(p => p.userId === userId);
+  const savePayments = next => {
+    const before = db.trainerPayments; db.trainerPayments = next;
+    try { saveDb(); } catch (e) { db.trainerPayments = before; throw e; }
   };
   const assignments = () => db.trainerAssignments || (db.trainerAssignments = {});
   routes['POST /api/trainer/assign'] = async (req, res) => {
@@ -45,15 +52,56 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
   };
   routes['GET /api/trainer/pupils'] = async (req, res) => {
     if (!gate(req, res, true)) return;
+    const today = trainerToday();
     const pupils = db.users.filter(u => !isAdmin(u)).map(u => {
       const s = readState(u.id);
       const unavailable = s === unreadable;
       const workouts = !unavailable && Array.isArray(s?.workouts) ? s.workouts.filter(w => w && Array.isArray(w.entries)) : [];
       return { id: u.id, name: u.name, disabled: !!u.disabled, unavailable,
         workouts: workouts.length, lastWorkout: workouts.map(w => w.d).filter(d => typeof d === 'string').sort().at(-1) || null,
-        assignment: assignments()[u.id] || null };
+        assignment: assignments()[u.id] || null, billing: paymentSummary(paymentsFor(u.id), today) };
     });
-    json(res, 200, { pupils });
+    json(res, 200, { pupils, today });
+  };
+  routes['GET /api/trainer/payments'] = async (req, res) => {
+    if (!gate(req, res, true)) return;
+    const userId = new URL(req.url, 'http://x').searchParams.get('userId');
+    const pupil = db.users.find(u => u.id === userId && !isAdmin(u));
+    if (!pupil) return json(res, 404, { error: 'Alumno no encontrado.' });
+    const today = trainerToday();
+    const history = [...paymentsFor(userId)].sort((a, b) => b.paidOn.localeCompare(a.paidOn) || b.created - a.created);
+    json(res, 200, { payments: history, summary: paymentSummary(history, today), today });
+  };
+  routes['POST /api/trainer/payments'] = async (req, res) => {
+    const trainer = gate(req, res, true); if (!trainer) return;
+    const body = await readBody(req);
+    const pupil = db.users.find(u => u.id === body?.userId && !isAdmin(u));
+    if (!pupil) return json(res, 404, { error: 'Alumno no encontrado.' });
+    let clean;
+    try { clean = validateManualPayment(body, trainerToday()); }
+    catch (e) { if (e instanceof PaymentValidationError) return json(res, 400, { error: e.message }); throw e; }
+    const existing = payments().find(p => p.requestId === body.requestId && p.recordedBy === trainer.id);
+    if (existing) {
+      const same = Object.entries(clean).every(([key, value]) => existing[key] === value);
+      if (!same) return json(res, 409, { error: 'Este envío ya fue registrado. Cierra el formulario y revisa el historial antes de crear otro.' });
+      return json(res, 200, { payment: existing, summary: paymentSummary(paymentsFor(pupil.id)) });
+    }
+    const payment = { ...clean, id: crypto.randomUUID(), requestId: body.requestId, recordedBy: trainer.id, created: Date.now(), voidedAt: null };
+    savePayments([...payments(), payment]);
+    audit(req, 'trainer.payment.record', { user: trainer, target: pupil });
+    json(res, 201, { payment, summary: paymentSummary(paymentsFor(pupil.id)) });
+  };
+  routes['POST /api/trainer/payments/void'] = async (req, res) => {
+    const trainer = gate(req, res, true); if (!trainer) return;
+    const body = await readBody(req);
+    const payment = payments().find(p => p.id === body?.id);
+    if (!payment) return json(res, 404, { error: 'Registro no encontrado.' });
+    if (!payment.voidedAt) {
+      const updated = { ...payment, voidedAt: Date.now(), voidedBy: trainer.id };
+      savePayments(payments().map(p => p.id === payment.id ? updated : p));
+      audit(req, 'trainer.payment.void', { user: trainer, target: db.users.find(u => u.id === payment.userId) });
+    }
+    json(res, 200, { ok: true, summary: paymentSummary(paymentsFor(payment.userId)) });
   };
   routes['GET /api/trainer/assignment'] = async (req, res) => {
     const user = gate(req, res); if (!user) return;

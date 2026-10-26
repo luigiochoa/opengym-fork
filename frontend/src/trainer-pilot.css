@@ -17,3 +17,21 @@
 .trainer-sheet-intro{margin:-4px 0 18px;line-height:1.4}
 .trainer-field-label{display:block;color:var(--label-2);font-size:13px;margin:0 4px 7px}
 .trainer-character-count{text-align:end;margin-bottom:16px}
+
+.trainer-pupil-filters{padding:10px 12px 6px}
+.trainer-payment-badge.current{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.trainer-payment-badge.upcoming,.trainer-payment-badge.due{background:color-mix(in srgb,var(--orange) 14%,transparent);color:var(--orange)}
+.trainer-payment-badge.overdue{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.trainer-payment-badge.scheduled{background:color-mix(in srgb,var(--indigo) 14%,transparent);color:var(--indigo)}
+.trainer-payment-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:14px}
+.trainer-payment-fields .measure-date{min-width:0;margin:0}
+.trainer-payment-fields .field{background:var(--surface-2);min-width:0;max-width:100%;font-size:16px;padding:12px 10px}
+.trainer-payment-single{grid-template-columns:minmax(0,1fr)}
+.trainer-payment-save{margin-top:18px}
+.trainer-payment-error{padding:12px 14px}
+.trainer-payment-entry+.trainer-payment-entry{border-top:var(--hair) solid var(--sep)}
+.trainer-payment-note{padding:0 14px 12px 55px;color:var(--label-2);font-size:13px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:360px){.trainer-payment-fields{grid-template-columns:minmax(0,1fr)}}
+
+.trainer-payment-fields input[type="date"]{color-scheme:dark}
+:root[data-theme="light"] .trainer-payment-fields input[type="date"]{color-scheme:light}
