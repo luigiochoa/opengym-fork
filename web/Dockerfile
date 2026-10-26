@@ -91,7 +91,8 @@ COPY --chown=101:101 catalogue/media/ /usr/share/nginx/html/exercise-media/
 
 # Parent directories created by COPY can inherit restrictive build permissions.
 USER root
-RUN chown -R 101:101 /etc/nginx/templates /usr/share/nginx/html
+RUN chown -R 101:101 /etc/nginx/templates /usr/share/nginx/html \
+    && chmod 755 /etc/nginx/templates
 USER 101
 
 # Set Default ENVs for nginx
