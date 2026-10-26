@@ -1,19 +1,21 @@
 // White-label overrides (build-time). Defaults keep upstream openGym branding.
+const ENV = import.meta.env || {}
+
 // Set via Docker build args / pack/clients/<id>/branding — see pack/README.md.
 
-export const APP_NAME = import.meta.env.VITE_APP_NAME || 'openGym'
-export const DEFAULT_ACCENT = import.meta.env.VITE_DEFAULT_ACCENT || 'lime'
-export const DEFAULT_LANG = import.meta.env.VITE_DEFAULT_LANG || 'en'
-export const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || 'https://gitlab.com/DuarteSantos8/opengym'
-export const BRAND_TAGLINE = import.meta.env.VITE_BRAND_TAGLINE || ''
+export const APP_NAME = ENV.VITE_APP_NAME || 'openGym'
+export const DEFAULT_ACCENT = ENV.VITE_DEFAULT_ACCENT || 'lime'
+export const DEFAULT_LANG = ENV.VITE_DEFAULT_LANG || 'en'
+export const SOURCE_URL = ENV.VITE_SOURCE_URL || 'https://github.com/luigiochoa/opengym-fork'
+export const BRAND_TAGLINE = ENV.VITE_BRAND_TAGLINE || ''
 /** Optional Instagram URL (build-time); shown on login when set. */
-export const BRAND_INSTAGRAM = (import.meta.env.VITE_BRAND_INSTAGRAM || '').trim()
+export const BRAND_INSTAGRAM = (ENV.VITE_BRAND_INSTAGRAM || '').trim()
 /** When '1', Login shows the brand mark from apply-brand.sh. */
-export const USE_BRAND_LOGO = import.meta.env.VITE_BRAND_LOGO === '1'
+export const USE_BRAND_LOGO = ENV.VITE_BRAND_LOGO === '1'
 /** Prefer SVG (transparent) when present; PNG remains for PWA icons. */
-export const BRAND_LOGO_SRC = import.meta.env.VITE_BRAND_LOGO_SRC || './brand-logo.png'
+export const BRAND_LOGO_SRC = ENV.VITE_BRAND_LOGO_SRC || './brand-logo.png'
 /** Exact brand accent hex (e.g. #67C00A). Used when DEFAULT_ACCENT is `brand`. */
-export const BRAND_ACCENT = (import.meta.env.VITE_BRAND_ACCENT || '').trim()
+export const BRAND_ACCENT = (ENV.VITE_BRAND_ACCENT || '').trim()
 
 /** Darken a #RRGGBB for pressed/hover (--acc-2). */
 export function accentPressed(hex, factor = 0.78) {

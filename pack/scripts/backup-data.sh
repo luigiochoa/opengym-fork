@@ -2,6 +2,7 @@
 # Backup the instance data folder and prune old local archives.
 # Usage: ./pack/scripts/backup-data.sh [backup-dir] [retention-days]
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="${1:-$ROOT/backups}"
@@ -16,7 +17,7 @@ if [[ ! -d "$ROOT/data" ]]; then
 fi
 
 mkdir -p "$DEST"
-tar -C "$ROOT" -czf "$ARCHIVE" data
+COPYFILE_DISABLE=1 tar -C "$ROOT" -czf "$ARCHIVE" data
 chmod 600 "$ARCHIVE"
 
 # Archives are local safety copies. Production should also sync DEST off-VPS.

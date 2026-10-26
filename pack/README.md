@@ -1,3 +1,5 @@
+> **POC actual: un entrenador y sus alumnos.** Ver [PILOT.md](PILOT.md). La gestión comercial de gimnasios queda fuera del piloto.
+
 # Pack inicial — openGym fork white-label
 
 > **Workspace activo:** Fortachones → https://fortachones.luigiochoa.com · cliente `fortachones-gym`.  
@@ -39,6 +41,7 @@ docker compose up -d --build
 | Tracker de socios (rutinas, series, peso) | Membresías / pagos |
 | Marca: nombre, tagline, acento, logo opcional | Clases y reservas |
 | Invite-only + admin del dueño | Check-in / torniquete |
+| Control manual de pagos, consulta del alumno y avisos push opt-in | Cobros online / facturación |
 | 1 instancia Docker por gym | Multi-tenant SaaS cerrado |
 
 ## Estructura

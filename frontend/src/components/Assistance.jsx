@@ -1,0 +1,118 @@
+import '../trainer-pilot.css'
+import { useEffect, useRef, useState } from 'react'
+import { useStore } from '../store/useStore.js'
+import { useUI } from '../store/useUI.js'
+import { dateLocale } from '../lib/i18n-core.js'
+import { api } from '../lib/api.js'
+import { pushSupported, enablePush } from '../lib/push.js'
+import { Section, Row, Button, SelectRow, TextArea } from './ui.jsx'
+
+const labels = { pending: 'Solicitud enviada · Esperando al entrenador', attending: 'Tu entrenador ya vio tu solicitud y va a ayudarte', resolved: 'Tu entrenador marcó la solicitud como atendida', cancelled: 'Cancelaste esta solicitud' }
+function useAssistance(owner) {
+  const user = useStore(s => s.user)
+  const enabled = useStore(s => s.config?.trainer_pilot)
+  const allowed = !!(enabled && user?.id && (owner ? user.owner : !user.admin))
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!allowed) return
+    let alive = true
+    let sequence = 0
+    let applied = 0
+    const load = () => {
+      if (document.visibilityState === 'hidden') return
+      const current = ++sequence
+      api(owner ? '/api/trainer/assistance' : '/api/me/assistance').then(data => {
+        if (alive && current > applied) { applied = current; setResult({ userId: user.id, data }); setError('') }
+      }).catch(() => { if (alive && current > applied) { applied = current; setError('No pudimos actualizar las solicitudes. Revisa tu conexión.') } })
+    }
+    const onChange = event => {
+      const detail = event.detail
+      applied = ++sequence
+      if (!owner && detail?.userId === user.id && detail.request) {
+        setResult({ userId: user.id, data: { request: detail.request } }); setError('')
+      } else load()
+    }
+    load(); const timer = setInterval(load, 10000)
+    window.addEventListener('assistance-change', onChange)
+    window.addEventListener('online', load)
+    document.addEventListener('visibilitychange', load)
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('assistance-change', onChange); window.removeEventListener('online', load); document.removeEventListener('visibilitychange', load) }
+  }, [allowed, user?.id, owner])
+  return { allowed, data: result?.userId === user?.id ? result?.data : null, error }
+}
+const changed = detail => window.dispatchEvent(new CustomEvent('assistance-change', { detail }))
+function RequestSheet({ close }) {
+  const userId = useRef(useStore.getState().user?.id).current
+  const requestId = useRef(crypto.randomUUID()).current
+  const [kind, setKind] = useState('assistance')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const send = async () => {
+    setBusy(true); setError('')
+    try {
+      if (useStore.getState().user?.id !== userId) throw Object.assign(new Error('Tu sesión cambió. Cierra este formulario y vuelve a abrirlo.'), { code: 'session-changed' })
+      const data = await api('/api/me/assistance', { method: 'POST', body: JSON.stringify({ kind, note, requestId }) })
+      changed({ userId, request: data.request }); close(); useUI.getState().toast(data.request.status === 'resolved' ? 'Esta solicitud ya fue atendida' : data.request.status === 'cancelled' ? 'Esta solicitud ya fue cancelada' : 'Solicitud enviada a tu entrenador')
+    } catch (e) {
+      if (e.status === 409 && e.data?.request) { changed({ userId, request: e.data.request }); close(); useUI.getState().toast(e.message) }
+      else setError(e.status || e.code === 'session-changed' ? e.message : 'No se pudo conectar con el servidor. Tu mensaje sigue aquí; revisa tu conexión y vuelve a intentar.')
+    }
+    finally { setBusy(false) }
+  }
+  return <><h3>Pedir ayuda</h3>
+    <p className="muted small trainer-sheet-intro">Tu entrenador recibirá tu solicitud. Solo ustedes dos podrán verla.</p>
+    <Section><SelectRow icon="bell" title="Necesito" sheetTitle="Motivo de la solicitud" value={kind} onChange={setKind} options={[{ value: 'assistance', label: 'Asistencia con un ejercicio' }, { value: 'question', label: 'Resolver una duda' }]} /></Section>
+    <label className="trainer-field-label" htmlFor="assistance-note">Detalle opcional</label>
+    <TextArea id="assistance-note" value={note} maxLength={500} onChange={e => setNote(e.target.value)} placeholder="Por ejemplo: ¿puedes revisar mi técnica en sentadilla?" />
+    {error && <p role="alert" className="trainer-error">{error}</p>}
+    <div className="trainer-form-action"><Button variant="primary" disabled={busy} onClick={send}>{busy ? 'Enviando…' : 'Avisar a mi entrenador'}</Button></div>
+  </>
+}
+export function StudentAssistance() {
+  const { allowed, data, error } = useAssistance(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+  if (!allowed) return null
+  const pending = data?.request && ['pending', 'attending'].includes(data.request.status)
+  const cancel = async () => {
+    const userId = useStore.getState().user?.id
+    setCancelling(true); setCancelError('')
+    try {
+      const response = await api('/api/me/assistance/cancel', { method: 'POST', body: JSON.stringify({ id: data.request.id }) })
+      changed({ userId, request: response.request })
+    } catch (e) { setCancelError(e.status === 409 ? 'Tu entrenador ya está atendiendo la solicitud.' : 'No se pudo cancelar. Revisa tu conexión.') }
+    finally { setCancelling(false) }
+  }
+  return <Section footer={cancelError || error || undefined}><Row icon="bell" iconTint="var(--orange)" title={pending ? 'Ayuda solicitada' : 'Pedir ayuda a mi entrenador'} subtitle={data?.request ? labels[data.request.status] : 'Asistencia con un ejercicio o una duda'} accessory={pending ? undefined : 'chevron'} onClick={pending ? undefined : () => useUI.getState().openSheet(close => <RequestSheet close={close} />)} />{data?.request?.status === 'pending' && <div className="trainer-form-action"><Button size="sm" variant="plain" disabled={cancelling} onClick={cancel}>{cancelling ? 'Cancelando…' : 'Cancelar solicitud'}</Button></div>}</Section>
+}
+export function TrainerAssistance({ onCount, hideEmpty = false }) {
+  const { allowed, data, error } = useAssistance(true)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [pushMessage, setPushMessage] = useState('')
+  useEffect(() => { if (data?.requests) onCount?.(data.requests.length) }, [data?.requests?.length, onCount])
+  if (!allowed) return null
+  const update = async (id, status) => {
+    setBusy(true); setActionError('')
+    try { await api('/api/trainer/assistance/status', { method: 'POST', body: JSON.stringify({ id, status }) }); changed() }
+    catch { setActionError('No se pudo actualizar la solicitud. Inténtalo de nuevo.') }
+    finally { setBusy(false) }
+  }
+  const activate = async () => {
+    setBusy(true)
+    try { await enablePush(); setPushMessage('Notificaciones activadas en este dispositivo.') }
+    catch { setPushMessage('No se pudieron activar. Revisa el permiso de notificaciones del navegador.') }
+    finally { setBusy(false) }
+  }
+  if (hideEmpty && !error && !actionError && (!data || !data.requests.length)) return null
+  return <Section title="Solicitudes de ayuda" footer={error || actionError || pushMessage || 'Se actualizan cada 10 segundos mientras esta pantalla está abierta.'}>
+    {!data ? <Row icon="clock" title="Consultando solicitudes…" /> : !data.requests.length ? <Row icon="checkCircle" iconTint="var(--green)" title="Sin solicitudes pendientes" subtitle="Tus alumnos pueden pedir ayuda desde Inicio o durante su sesión." /> : data.requests.map(r => <div key={r.id}>
+      <Row icon="bell" iconTint="var(--orange)" title={`${r.name} ${r.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}`} subtitle={`${new Date(r.created).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${r.status === 'attending' ? 'En atención' : 'Pendiente'}`} />
+      {r.note && <p className="trainer-note">{r.note}</p>}
+      <div className="trainer-form-action">{r.status === 'pending' && <Button size="sm" variant="tinted" disabled={busy} onClick={() => update(r.id, 'attending')}>Voy a ayudarte</Button>} <Button size="sm" variant="plain" disabled={busy} onClick={() => update(r.id, 'resolved')}>Marcar atendida</Button></div>
+    </div>)}
+    {pushSupported() ? <Row icon="bell" title="Recibir avisos en este dispositivo" subtitle="Activa las notificaciones para enterarte con la app cerrada." onClick={busy ? undefined : activate} accessory="chevron" /> : <Row icon="bell" title="Avisos dentro de la app" subtitle="Los push requieren la versión publicada con HTTPS y un dispositivo compatible." />}
+  </Section>
+}

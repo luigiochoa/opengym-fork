@@ -1,3 +1,5 @@
+> La POC actual del entrenador ya incluye un registro manual de pagos y renovaciones en este fork. Ver [PILOT.md](PILOT.md). El roadmap de gestión de gimnasios que sigue corresponde al producto independiente.
+
 # Roadmap ops (Fase 2+) — producto propio
 
 Prioridad fija hasta que el feedback del MVP diga lo contrario. Implementar en **`gym-local`**, no en este fork AGPL.
