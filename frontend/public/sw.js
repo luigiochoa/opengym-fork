@@ -217,7 +217,7 @@ self.addEventListener('push', e => {
       badge: 'icon-180.png',
       tag,
       renotify: true,
-      data: { paymentPage: data.url === '#/payments' }
+      data: { paymentPage: data.url === '#/payments', trainerPage: data.url === '#/trainer' }
     })
   })())
 })
@@ -225,9 +225,9 @@ self.addEventListener('notificationclick', e => {
   e.notification.close()
   e.waitUntil(self.clients.matchAll({ type: 'window' }).then(clients => {
     const c = clients.find(c => 'focus' in c)
-    if (e.notification.data?.paymentPage) {
+    if (e.notification.data?.paymentPage || e.notification.data?.trainerPage) {
       const target = new URL('./', location.href)
-      target.hash = '/payments'
+      target.hash = e.notification.data?.trainerPage ? '/trainer' : '/payments'
       return c?.navigate ? c.navigate(target.href).then(page => page ? page.focus() : self.clients.openWindow(target.href)).catch(() => self.clients.openWindow(target.href)) : self.clients.openWindow(target.href)
     }
     return c ? c.focus() : self.clients.openWindow('./')

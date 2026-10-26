@@ -1378,6 +1378,7 @@ function removeAccount(u) {
   if (db.trainerPayments) db.trainerPayments = db.trainerPayments.filter(p => p.userId !== u.id);
   if (db.trainerAssignments) delete db.trainerAssignments[u.id];
   if (db.trainerPaymentReminders) delete db.trainerPaymentReminders[u.id];
+  if (db.trainerAssistance) delete db.trainerAssistance[u.id];
   if (db.trainerPaymentNotices) delete db.trainerPaymentNotices[u.id];
   dropDeviceLinks(db, u.id);
   presence.delete(u.id);
@@ -2664,7 +2665,7 @@ const routes = {
     json(res, 200, { ok: true });
   },
 
-  ...trainerRoutes({ enabled: TRAINER_PILOT, json, readBody, readSession, requireOwner, db, saveDb, readState: readStateStrict, unreadable: UNREADABLE, isAdmin, audit }),
+  ...trainerRoutes({ enabled: TRAINER_PILOT, json, readBody, readSession, requireOwner, db, saveDb, readState: readStateStrict, unreadable: UNREADABLE, isAdmin, audit, sendPush, ownerId }),
 
   /* ---------- admin dashboard ---------- */
   // One row per user, cheap enough for a personal instance (reads each state file once).

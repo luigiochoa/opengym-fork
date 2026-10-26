@@ -247,3 +247,17 @@ describe('renewal notification navigation', () => {
     expect(opened).toBe('./')
   })
 })
+
+
+it('opens trainer assistance from a push under a subpath', async () => {
+  await loadSW()
+  globalThis.location.href = 'https://gym.test/gym/sw.js'
+  let shown, opened = ''
+  self.clients.matchAll = async () => []
+  self.clients.openWindow = async url => { opened = url }
+  self.registration.showNotification = async (title, options) => { shown = options }
+  await fire('push', { data: { json: () => ({ title: 'Solicitud de un alumno', url: '#/trainer' }) } })
+  expect(shown.data.trainerPage).toBe(true)
+  await fire('notificationclick', { notification: { close() {}, data: shown.data } })
+  expect(opened).toBe('https://gym.test/gym/#/trainer')
+})

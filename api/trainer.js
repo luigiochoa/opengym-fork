@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { defaultPaymentReminders, validatePaymentReminders } from './trainer-payment-reminders.js';
 import { paymentSummary, trainerToday, validateManualPayment, PaymentValidationError } from './trainer-payments.js';
 
-export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit }) {
+export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit, sendPush, ownerId }) {
   const routes = {};
   const gate = (req, res, owner = false) => {
     if (!enabled) { json(res, 404, { error: 'pilot disabled' }); return null; }
@@ -20,6 +20,50 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     try { saveDb(); } catch (e) { db.trainerPayments = before; throw e; }
   };
   const assignments = () => db.trainerAssignments || (db.trainerAssignments = {});
+  const help = () => db.trainerAssistance || {};
+  const saveHelp = next => {
+    const before = db.trainerAssistance; db.trainerAssistance = next;
+    try { saveDb(); } catch (e) { db.trainerAssistance = before; throw e; }
+  };
+  routes['GET /api/me/assistance'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Solo alumnos.' });
+    json(res, 200, { request: help()[user.id] || null });
+  };
+  routes['POST /api/me/assistance'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Solo alumnos.' });
+    const body = await readBody(req);
+    if (!['assistance', 'question'].includes(body?.kind) || typeof body.note !== 'string' || body.note.length > 500)
+      return json(res, 400, { error: 'Selecciona el motivo y usa hasta 500 caracteres.' });
+    const previous = help()[user.id];
+    if (previous && previous.status !== 'resolved') return json(res, 200, { request: previous });
+    if (previous && Date.now() - previous.created < 60000) return json(res, 429, { error: 'Espera un minuto antes de enviar otra solicitud.' });
+    const trainer = db.users.find(u => u.id === ownerId() && !u.disabled);
+    if (!trainer) return json(res, 503, { error: 'Tu entrenador no está disponible.' });
+    const request = { id: crypto.randomUUID(), userId: user.id, kind: body.kind, note: body.note.trim(), created: Date.now(), status: 'pending' };
+    saveHelp({ ...help(), [user.id]: request });
+    // Persist first. Push delivery is best effort; the inbox remains the source of truth.
+    void sendPush(trainer.id, { title: 'Solicitud de un alumno', body: `${user.name} ${request.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}.`, tag: 'trainer-assistance-' + user.id, url: '#/trainer' }).catch(e => console.error('assistance push:', e.message));
+    json(res, 201, { request });
+  };
+  routes['GET /api/trainer/assistance'] = async (req, res) => {
+    if (!gate(req, res, true)) return;
+    const requests = Object.values(help()).filter(r => r.status !== 'resolved' && db.users.some(u => u.id === r.userId && !u.disabled && !isAdmin(u)))
+      .sort((a, b) => a.created - b.created).map(r => ({ ...r, name: db.users.find(u => u.id === r.userId).name }));
+    json(res, 200, { requests });
+  };
+  routes['POST /api/trainer/assistance/status'] = async (req, res) => {
+    if (!gate(req, res, true)) return;
+    const body = await readBody(req);
+    const request = Object.values(help()).find(r => r.id === body?.id);
+    if (!request) return json(res, 404, { error: 'Solicitud no encontrada.' });
+    if (!['attending', 'resolved'].includes(body.status)) return json(res, 400, { error: 'Estado inválido.' });
+    if (request.status === 'resolved' || (request.status === 'attending' && body.status === 'attending')) return json(res, 200, { request });
+    const updated = { ...request, status: body.status, updated: Date.now() };
+    saveHelp({ ...help(), [request.userId]: updated });
+    json(res, 200, { request: updated });
+  };
   routes['GET /api/me/payments'] = async (req, res) => {
     const user = gate(req, res); if (!user) return;
     if (isAdmin(user)) return json(res, 403, { error: 'Esta vista es para alumnos.' });

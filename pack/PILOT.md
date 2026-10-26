@@ -90,3 +90,12 @@ Si se necesita volver: detener toda la instancia, mover el `data/` actual a una 
 ## Límites de esta POC
 
 Una instancia, un entrenador propietario y sus alumnos. El propietario puede revisar sus historiales; no se han añadido varios entrenadores, cobros ni membresías. El feedback es una nota actual por alumno, no un chat. Las asignaciones y comentarios necesitan conexión; el tracker conserva la sincronización local del original. Las animaciones de ejercicios no se precargan todas para uso sin red. La aceptación conserva rutinas previas y sobrescribe solo los días seleccionados; no elimina automáticamente versiones anteriores de una rutina.
+
+
+## Pedir ayuda durante el entrenamiento
+
+El alumno encuentra **Pedir ayuda a mi entrenador** en Inicio y durante una sesión activa. Puede elegir asistencia con un ejercicio o una duda y añadir hasta 500 caracteres. Se guarda una solicitud actual por alumno en `db.json`; no se añade al historial de ejercicios del teléfono. Necesita conexión para enviarla.
+
+El propietario ve **Solicitudes de ayuda** en Mis alumnos, ordenadas de más antigua a más reciente. **Voy a ayudarte** confirma recepción al alumno; **Marcar atendida** cierra la solicitud. Ambas pantallas consultan cambios cada diez segundos mientras están visibles. Otro alumno u otro administrador no pueden consultar ni atender estas solicitudes. Una solicitud pendiente no genera nuevos avisos al repetir el envío; tras cerrarla hay una espera mínima de un minuto desde el envío original.
+
+Si el propietario tiene una suscripción push, se intenta enviar un aviso con el nombre del alumno y el motivo, sin incluir la nota. Al tocarlo abre Mis alumnos. El botón de activar avisos registra este dispositivo con permiso explícito y habilita las notificaciones generales de la app. En HTTP local se muestran solo los avisos dentro de la app. El push es un intento inmediato, sin garantía de entrega ni reintentos persistentes; la solicitud permanece disponible aunque falle el aviso. No hay chat ni seguimiento de ubicación.

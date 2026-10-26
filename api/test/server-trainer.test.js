@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { boundPort } from './helpers.mjs';
+import { trainerRoutes } from '../trainer.js';
 
 const API = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const owner = '11111111-1111-4111-8111-111111111111';
@@ -150,4 +151,56 @@ test('pupils can read only their own payment projection and manage only their ow
   assert.equal((await h.req('POST', '/api/admin/user/delete', owner, { id: pupil })).status, 200);
   const persisted = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json'), 'utf8'));
   assert.equal(persisted.trainerPaymentReminders[pupil], undefined);
+});
+
+
+test('assistance: private requests, deduplication, owner transitions and cooldown', async t => {
+  const h = await start(t);
+  assert.equal((await h.req('GET', '/api/me/assistance')).status, 401);
+  assert.equal((await h.req('POST', '/api/me/assistance', owner, { kind: 'question', note: '' })).status, 403);
+  assert.equal((await h.req('POST', '/api/me/assistance', pupil, { kind: 'wrong', note: '' })).status, 400);
+  assert.equal((await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: 'x'.repeat(501) })).status, 400);
+  const first = await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: 'Revisar técnica', userId: other });
+  assert.equal(first.status, 201);
+  const id = first.body.request.id;
+  assert.equal(first.body.request.userId, pupil);
+  assert.equal((await h.req('GET', '/api/me/assistance?userId=' + pupil, other)).body.request, null);
+  const duplicate = await h.req('POST', '/api/me/assistance', pupil, { kind: 'assistance', note: '' });
+  assert.equal(duplicate.body.request.id, id);
+  assert.equal((await h.req('GET', '/api/trainer/assistance', pupil)).status, 403);
+  assert.equal((await h.req('GET', '/api/trainer/assistance', secondAdmin)).status, 403);
+  assert.equal((await h.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 1);
+  assert.equal((await h.req('POST', '/api/trainer/assistance/status', other, { id, status: 'resolved' })).status, 403);
+  assert.equal((await h.req('POST', '/api/trainer/assistance/status', owner, { id, status: 'attending' })).status, 200);
+  assert.equal((await h.req('GET', '/api/me/assistance', pupil)).body.request.status, 'attending');
+  assert.equal((await h.req('POST', '/api/trainer/assistance/status', owner, { id, status: 'resolved' })).status, 200);
+  await h.req('POST', '/api/trainer/assistance/status', owner, { id, status: 'attending' });
+  assert.equal((await h.req('GET', '/api/me/assistance', pupil)).body.request.status, 'resolved');
+  assert.equal((await h.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 0);
+  assert.equal((await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: '' })).status, 429);
+  const saved = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json')));
+  assert.equal(saved.trainerAssistance[pupil].status, 'resolved');
+});
+
+test('assistance is unavailable when the pilot is disabled', async t => {
+  const h = await start(t, false);
+  assert.equal((await h.req('GET', '/api/me/assistance', pupil)).status, 404);
+  assert.equal((await h.req('POST', '/api/trainer/assistance/status', owner, {})).status, 404);
+});
+
+
+test('assistance push goes only to owner, after persistence, without the private note and without duplicate sends', async () => {
+  const db = { users: [{ id: owner, admin: true }, { id: pupil, name: 'Ana' }] };
+  const sends = []; let saved = false;
+  const routes = trainerRoutes({ enabled: true, db, json: (res, status, body) => Object.assign(res, { status, body }), readBody: async () => ({ kind: 'question', note: 'PRIVATE-NOTE' }), readSession: () => db.users[1], isAdmin: u => !!u.admin, ownerId: () => owner, saveDb: () => { saved = true; }, sendPush: async (...args) => { assert.ok(saved); sends.push(args); return { sent: 1 }; } });
+  const res = {};
+  await routes['POST /api/me/assistance']({}, res);
+  assert.equal(res.status, 201);
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0][0], owner);
+  assert.match(sends[0][1].body, /Ana tiene una duda/);
+  assert.equal(sends[0][1].url, '#/trainer');
+  assert.ok(!JSON.stringify(sends).includes('PRIVATE-NOTE'));
+  await routes['POST /api/me/assistance']({}, {});
+  assert.equal(sends.length, 1);
 });
