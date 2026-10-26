@@ -221,3 +221,29 @@ describe('sw.js re-registers a rotated push subscription with the page\'s device
     expect(await (await (await globalThis.caches.open(DEVICE_CACHE)).match(DEVICE_URL)).text()).toBe('dev1234abcd')
   })
 })
+
+describe('renewal notification navigation', () => {
+  it('opens the pupil payment page under the installed app path', async () => {
+    await loadSW()
+    globalThis.location.href = 'https://gym.test/gym/sw.js'
+    let shown, navigated = '', focused = 0
+    const client = { focus: async () => { focused++ }, navigate: async url => { navigated = url; return client } }
+    self.clients.matchAll = async () => [client]
+    self.registration.showNotification = async (title, options) => { shown = options }
+    await fire('push', { data: { json: () => ({ title: 'Tu renovación se acerca', url: '#/payments' }) } })
+    expect(shown.data.paymentPage).toBe(true)
+    await fire('notificationclick', { notification: { close() {}, data: shown.data } })
+    expect(navigated).toBe('https://gym.test/gym/#/payments')
+    expect(focused).toBe(1)
+  })
+  it('ignores unrecognized destination URLs in notification payloads', async () => {
+    await loadSW()
+    let shown, opened = ''
+    self.registration.showNotification = async (title, options) => { shown = options }
+    self.clients.openWindow = async url => { opened = url }
+    await fire('push', { data: { json: () => ({ url: 'https://another.test/steal' }) } })
+    expect(shown.data.paymentPage).toBe(false)
+    await fire('notificationclick', { notification: { close() {}, data: shown.data } })
+    expect(opened).toBe('./')
+  })
+})

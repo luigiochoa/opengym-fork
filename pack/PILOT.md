@@ -51,7 +51,19 @@ En la lista se puede filtrar **Por renovar**. El resumen se actualiza al guardar
 
 El historial permanece en el servidor junto con los respaldos de la instancia. Tocar un pago permite **Anular registro**, con confirmación y recálculo de la renovación. La anulación conserva el registro; para corregir fechas o montos se anula y se registra la versión correcta. Los reintentos del mismo envío no crean duplicados.
 
-Este control es privado del propietario de la instancia: otros administradores y alumnos no pueden consultar ni modificar los pagos. No procesa cobros, no envía recordatorios automáticos ni bloquea el acceso al entrenamiento por vencimiento. No suma importes de monedas diferentes.
+El propietario registra y anula pagos. Cada alumno puede consultar únicamente sus propios pagos, fechas e importes desde **Inicio → Mis pagos**, sin editar el registro. Otros administradores no tienen acceso a la gestión de pagos. Las notas internas, identificadores del operador y claves de reintento nunca se envían al alumno. No procesa cobros ni bloquea el acceso al entrenamiento por vencimiento. No suma importes de monedas diferentes.
+
+## Vista del alumno y recordatorios push
+
+En **Inicio → Mis pagos**, cada alumno ve último pago, próxima renovación, estado e historial propios. La página funciona también antes de que el entrenador le asigne una rutina. Los registros anulados se indican, pero el alumno no puede anular ni modificar importes o fechas.
+
+**Avisos de renovación** está apagado por defecto. Solo el alumno puede activarlo y elegir la hora. Se prepara un aviso durante los tres días anteriores y otro el día de renovación; no se repiten a diario ni se envían avisos a otros alumnos. Desactivarlo no apaga las notificaciones de entrenamiento. La hora usa la zona indicada en la página (Caracas por defecto).
+
+En la POC HTTP local se guardan preferencias y se muestra el registro, pero el cliente existente no registra push sin HTTPS. Para recibir avisos reales, publicar la app con HTTPS, permitir notificaciones en un navegador compatible y activar el dispositivo desde **Mis pagos**. La UI distingue la preferencia guardada de un dispositivo registrado. No es necesario mantener la página abierta, pero la API sí debe estar funcionando.
+
+El servidor revisa cada minuto, con hasta tres horas de recuperación después de la hora elegida y reintentos de fallos cada quince minutos. Guarda los avisos enviados para evitar duplicarlos tras reiniciar y vuelve a calcular la fecha si se registra o anula un pago. Sin pago registrado, sin suscripción push, sin permiso opt-in o con cuenta suspendida no envía avisos. En la pantalla bloqueada solo muestra un mensaje genérico, sin montos ni notas; al tocarlo abre la página de pagos, que exige iniciar sesión.
+
+La lógica de envío está probada con un emisor simulado y las pruebas del transporte push existente. La entrega real en un teléfono queda pendiente de la instalación HTTPS y del permiso del usuario.
 
 ## Validación manual antes de invitar alumnos reales
 
@@ -65,6 +77,9 @@ Usar dos perfiles de prueba distintos y dos sesiones de navegador:
 - [ ] Desconectar después de descargar la app, registrar series, reconectar y revisar la sincronización.
 - [ ] Probar el acceso elegido en el teléfono real del piloto.
 - [ ] Imprimir un plan: nombre/logo/color de Fortachones y atribución a openGym.
+- [ ] El alumno abre Mis pagos y ve solo sus fechas e importes; las notas internas no aparecen.
+- [ ] El alumno activa y desactiva sus avisos; cambiar de alumno no comparte la preferencia.
+- [ ] En la instalación HTTPS, permitir push en un dispositivo y verificar recepción y apertura de Mis pagos.
 - [ ] Exportar un perfil y restaurar el respaldo en una instancia separada.
 
 ## Recuperación

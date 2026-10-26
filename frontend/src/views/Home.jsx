@@ -1,4 +1,5 @@
 import { APP_NAME } from '../lib/brand.js'
+import { StudentPaymentCard } from '../components/StudentPayments.jsx'
 import { TrainerHome } from '../components/TrainerPilot.jsx'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -110,6 +111,7 @@ export default function Home() {
     </div>
 
     <TrainerHome />
+    <StudentPaymentCard />
 
     <div className="card">
       {/* A coach week runs by order, not by weekday, so its progress row stands in for the

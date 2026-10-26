@@ -1,6 +1,7 @@
 // Human-trainer pilot: owner-only assignment, distinct from the optional AI Coach.
 // Assignments live in db.json, never overwrite a pupil's synced workout document.
 import crypto from 'node:crypto';
+import { defaultPaymentReminders, validatePaymentReminders } from './trainer-payment-reminders.js';
 import { paymentSummary, trainerToday, validateManualPayment, PaymentValidationError } from './trainer-payments.js';
 
 export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit }) {
@@ -19,6 +20,30 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     try { saveDb(); } catch (e) { db.trainerPayments = before; throw e; }
   };
   const assignments = () => db.trainerAssignments || (db.trainerAssignments = {});
+  routes['GET /api/me/payments'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Esta vista es para alumnos.' });
+    const requested = new URL(req.url, 'http://x').searchParams.get('userId');
+    if (requested && requested !== user.id) return json(res, 403, { error: 'Solo puedes consultar tus pagos.' });
+    const today = trainerToday();
+    const history = [...paymentsFor(user.id)].sort((a, b) => b.paidOn.localeCompare(a.paidOn) || b.created - a.created);
+    const publicPayments = history.map(({ id, paidOn, validFrom, nextDueOn, amountMinor, currency, method, voidedAt }) => ({ id, paidOn, validFrom, nextDueOn, amountMinor, currency, method, voided: !!voidedAt }));
+    json(res, 200, { payments: publicPayments, summary: paymentSummary(history, today), today,
+      reminders: db.trainerPaymentReminders?.[user.id] || defaultPaymentReminders(),
+      hasPushSubscription: db.subs.some(s => s.userId === user.id) });
+  };
+  routes['POST /api/me/payment-reminders'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Esta vista es para alumnos.' });
+    const body = await readBody(req);
+    let prefs;
+    try { prefs = validatePaymentReminders(body); }
+    catch (e) { if (e instanceof PaymentValidationError) return json(res, 400, { error: e.message }); throw e; }
+    const before = db.trainerPaymentReminders;
+    db.trainerPaymentReminders = { ...(before || {}), [user.id]: prefs };
+    try { saveDb(); } catch (e) { db.trainerPaymentReminders = before; throw e; }
+    json(res, 200, { reminders: prefs });
+  };
   routes['POST /api/trainer/assign'] = async (req, res) => {
     const trainer = gate(req, res, true); if (!trainer) return;
     const body = await readBody(req);

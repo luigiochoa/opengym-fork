@@ -13,6 +13,7 @@ import {
   generateAuthenticationOptions, verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import { trainerRoutes } from './trainer.js';
+import { createPaymentReminderRunner } from './trainer-payment-reminders.js';
 import webpush from 'web-push';
 import { createInviteCode, normalizeInvitePrefix } from './invite-code.js';
 import * as coachConfig from './coach/config.js';
@@ -377,7 +378,8 @@ function pushEndpointError(raw) {
 async function sendPush(userId, payload, deviceId) {
   let subs = db.subs.filter(s => s.userId === userId);
   if (deviceId) subs = subs.filter(s => !s.deviceId || s.deviceId === deviceId);
-  if (!subs.length) return;
+  if (!subs.length) return { sent: 0 };
+  let sent = 0;
   const body = JSON.stringify(payload);
   let dirty = false;
   let next = 0;
@@ -400,6 +402,7 @@ async function sendPush(userId, payload, deviceId) {
       try {
         await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, body,
           { urgency: 'high', timeout: PUSH_TIMEOUT_MS, agent: PUSH_AGENT });
+        sent++;
       } catch (e) {
         console.error('push send failed', userId, e.statusCode, e.body || e.message);
         // 404/410: the push service says the subscription is gone. 403: it refuses our VAPID
@@ -420,6 +423,7 @@ async function sendPush(userId, payload, deviceId) {
   // memory, so only the copy on disk lags: the next saveDb() that succeeds, from any route,
   // writes it out, and a restart re-reads the old file and prunes it again on the next send.
   if (dirty) { try { saveDb(); } catch (e) { console.error('push: could not save db.json', e.message); } }
+  return { sent };
 }
 
 // Rest-timer alerts: client schedules on start/extend, cancels on skip or on-screen completion —
@@ -1373,6 +1377,8 @@ function removeAccount(u) {
   db.subs = (db.subs || []).filter(x => x.userId !== u.id);
   if (db.trainerPayments) db.trainerPayments = db.trainerPayments.filter(p => p.userId !== u.id);
   if (db.trainerAssignments) delete db.trainerAssignments[u.id];
+  if (db.trainerPaymentReminders) delete db.trainerPaymentReminders[u.id];
+  if (db.trainerPaymentNotices) delete db.trainerPaymentNotices[u.id];
   dropDeviceLinks(db, u.id);
   presence.delete(u.id);
   // The training history and any Coach credential of theirs, both outside db.json.
@@ -2883,6 +2889,11 @@ coachJobs.setProposalHook((uid, pending) => {
 });
 startCadence({ users: () => db.users.filter(u => !u.disabled), userNow, skip: uid => !stateSummary(uid)?.consent });
 startWarmup();
+// Renewal pushes use their own pupil opt-in and do not turn workout notifications off.
+const runPaymentReminders = createPaymentReminderRunner({ db, saveDb, sendPush, enabled: TRAINER_PILOT, isAdmin });
+if (TRAINER_PILOT) setInterval(() => {
+  runPaymentReminders().catch(e => console.error('payment reminder tick failed', e.message));
+}, 60000).unref();
 
 // node's requestTimeout is one number for every route, and it is half an hour (below) for the
 // sake of one: a video uploaded over a slow uplink. Every other request keeps node's old five

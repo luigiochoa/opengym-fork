@@ -123,3 +123,31 @@ test('manual payments: owner-only, validated, retry-safe, private and reversible
   const removed = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json'), 'utf8'));
   assert.equal(removed.trainerPayments.some(p => p.userId === pupil), false);
 });
+
+test('pupils can read only their own payment projection and manage only their own reminder opt-in', async t => {
+  const h = await start(t);
+  const body = { requestId: crypto.randomUUID(), userId: pupil, paidOn: '2000-01-01', validFrom: '2000-01-01', nextDueOn: '2099-01-01', amountMinor: 3050, currency: 'USD', note: 'Nota interna: no compartir' };
+  assert.equal((await h.req('POST', '/api/trainer/payments', owner, body)).status, 201);
+  assert.equal((await h.req('GET', '/api/me/payments')).status, 401);
+  const read = await h.req('GET', '/api/me/payments', pupil);
+  assert.equal(read.status, 200); assert.equal(read.body.payments[0].amountMinor, 3050);
+  assert.equal(read.body.summary.nextDueOn, '2099-01-01');
+  assert.equal(read.body.reminders.enabled, false);
+  for (const field of ['note', 'requestId', 'recordedBy', 'userId', 'voidedBy']) assert.equal(field in read.body.payments[0], false);
+  assert.equal(JSON.stringify(read.body).includes('Nota interna'), false);
+  assert.equal((await h.req('GET', '/api/me/payments?userId=' + pupil, other)).status, 403);
+  assert.equal((await h.req('GET', '/api/me/payments', other)).body.payments.length, 0);
+  assert.equal((await h.req('POST', '/api/trainer/payments', pupil, body)).status, 403);
+  assert.equal((await h.req('POST', '/api/trainer/payments/void', pupil, { id: read.body.payments[0].id })).status, 403);
+  const prefs = { enabled: true, time: '09:00', timeZone: 'America/Caracas', userId: other };
+  assert.equal((await h.req('POST', '/api/me/payment-reminders', pupil, prefs)).status, 200);
+  assert.equal((await h.req('GET', '/api/me/payments', pupil)).body.reminders.enabled, true);
+  assert.equal((await h.req('GET', '/api/me/payments', other)).body.reminders.enabled, false);
+  assert.equal((await h.req('POST', '/api/me/payment-reminders', pupil, { ...prefs, timeZone: 'Bad/Zone' })).status, 400);
+  assert.equal((await h.req('POST', '/api/me/payment-reminders', owner, prefs)).status, 403);
+  assert.equal((await h.req('POST', '/api/me/payment-reminders', pupil, { ...prefs, enabled: false })).status, 200);
+  assert.equal((await h.req('GET', '/api/me/payments', pupil)).body.reminders.enabled, false);
+  assert.equal((await h.req('POST', '/api/admin/user/delete', owner, { id: pupil })).status, 200);
+  const persisted = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json'), 'utf8'));
+  assert.equal(persisted.trainerPaymentReminders[pupil], undefined);
+});

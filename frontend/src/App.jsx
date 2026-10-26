@@ -53,6 +53,7 @@ import ProgressPhotos from './views/ProgressPhotos.jsx'
 import { SettingsRoute } from './views/Settings.jsx'
 import Admin from './views/Admin.jsx'
 import Trainer from './views/Trainer.jsx'
+import StudentPayments from './components/StudentPayments.jsx'
 import CoachChat from './views/CoachChat.jsx'
 import Measurements from './views/Measurements.jsx'
 import CoachIntake from './views/CoachIntake.jsx'
@@ -268,6 +269,7 @@ function Shell() {
       <Route path="/coach/intake" element={<CoachIntake />} />
       <Route path="/coach/proposal" element={<Navigate to="/coach" replace />} />
       <Route path="/coach/setup" element={<CoachSetup />} />
+      <Route path="/payments" element={user && !user.admin ? (!config ? <p role="status">Cargando pagos…</p> : config.trainer_pilot ? <StudentPayments /> : <Navigate to="/home" replace />) : <Navigate to="/home" replace />} />
       <Route path="/trainer" element={user?.owner ? (!config ? <p role="status">Cargando alumnos…</p> : config.trainer_pilot ? <Trainer /> : <Navigate to="/home" replace />) : <Navigate to="/home" replace />} />
       <Route path="/admin" element={user?.admin ? <Admin /> : <Navigate to="/home" replace />} />
       <Route path="*" element={<Navigate to="/home" replace />} />

@@ -2,17 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { useUI } from '../store/useUI.js'
 import { fmtDate, todayISO } from '../lib/format.js'
-import { PAYMENT_LABELS, parsePaymentAmount, suggestedDueDate, paymentMoney } from '../lib/trainer-payments.js'
+import { parsePaymentAmount, suggestedDueDate, paymentMoney } from '../lib/trainer-payments.js'
 import { confirmSheet, menuSheet } from '../sheets.jsx'
 import { Button, Section, Row, TextField, TextArea, SelectRow } from './ui.jsx'
 
 const periods = [{ value: 'month', label: 'Un mes' }, { value: 'fortnight', label: '15 días' }, { value: 'week', label: '7 días' }, { value: 'custom', label: 'Personalizado' }]
 const currencies = ['USD', 'VES', 'EUR', 'COP', 'MXN'].map(value => ({ value, label: value }))
 const methods = [{ value: 'unspecified', label: 'Sin especificar' }, { value: 'transfer', label: 'Transferencia' }, { value: 'cash', label: 'Efectivo' }, { value: 'other', label: 'Otro' }]
-export function PaymentBadge({ summary }) {
-  const status = summary?.status || 'none'
-  return <span className={`tag trainer-payment-badge ${status}`} aria-label={`Pago: ${PAYMENT_LABELS[status]}`}>{PAYMENT_LABELS[status]}</span>
-}
+export { default as PaymentBadge } from './PaymentBadge.jsx'
+import PaymentBadge from './PaymentBadge.jsx'
 
 function PaymentForm({ pupil, billing, saved, close }) {
   const today = billing.today || todayISO()
@@ -92,7 +90,7 @@ export function TrainerPayments({ pupil, onChanged }) {
   }
   const summary = billing.summary
   return <>
-    <Section title="Control de pagos" footer="Registro privado del entrenador.">
+    <Section title="Control de pagos" footer="El alumno ve sus fechas e importes. Tus notas quedan privadas.">
       <Row icon="checkCircle" title="Estado"><PaymentBadge summary={summary} /></Row>
       <Row icon="calendar" iconTint="var(--indigo)" title="Último pago" value={summary.paidOn ? fmtDate(summary.paidOn, false, true) : 'Sin registro'} />
       <Row icon="clock" iconTint="var(--orange)" title="Próxima renovación" value={summary.nextDueOn ? fmtDate(summary.nextDueOn, false, true) : 'Por definir'} />
