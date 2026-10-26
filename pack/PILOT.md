@@ -99,3 +99,10 @@ El alumno encuentra **Pedir ayuda a mi entrenador** en Inicio y durante una sesi
 El propietario ve **Solicitudes de ayuda** en Mis alumnos, ordenadas de más antigua a más reciente. **Voy a ayudarte** confirma recepción al alumno; **Marcar atendida** cierra la solicitud. Ambas pantallas consultan cambios cada diez segundos mientras están visibles. Otro alumno u otro administrador no pueden consultar ni atender estas solicitudes. Una solicitud pendiente no genera nuevos avisos al repetir el envío; tras cerrarla hay una espera mínima de un minuto desde el envío original.
 
 Si el propietario tiene una suscripción push, se intenta enviar un aviso con el nombre del alumno y el motivo, sin incluir la nota. Al tocarlo abre Mis alumnos. El botón de activar avisos registra este dispositivo con permiso explícito y habilita las notificaciones generales de la app. En HTTP local se muestran solo los avisos dentro de la app. El push es un intento inmediato, sin garantía de entrega ni reintentos persistentes; la solicitud permanece disponible aunque falle el aviso. No hay chat ni seguimiento de ubicación.
+
+
+### Refuerzos después de QA de asistencia
+
+Los reintentos del mismo formulario conservan su identificador: si el entrenador ya atendió esa solicitud, el reintento devuelve el estado atendido y no genera otro aviso. Las consultas lentas no sobrescriben respuestas más recientes ni impiden mostrar resultados cuando la red tarda más de diez segundos. Al recuperar conexión se vuelve a consultar. El envío confirmado actualiza al alumno de inmediato. Un formulario abierto antes de cambiar de cuenta no puede enviarse con la cuenta nueva.
+
+Un fallo de conexión conserva el detalle en el formulario y muestra una indicación en español para reintentar; el borrador no se garantiza tras cerrar o recargar la página. Las solicitudes muestran fecha y hora en el idioma de la app. Las pruebas cubren concurrencia, reinicio del servidor, aislamiento de cuentas, fallo de push y reversión cuando falla el guardado.

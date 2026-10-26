@@ -1,7 +1,8 @@
 import '../trainer-pilot.css'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
+import { dateLocale } from '../lib/i18n-core.js'
 import { api } from '../lib/api.js'
 import { pushSupported, enablePush } from '../lib/push.js'
 import { Section, Row, Button, SelectRow, TextArea } from './ui.jsx'
@@ -16,21 +17,34 @@ function useAssistance(owner) {
   useEffect(() => {
     if (!allowed) return
     let alive = true
+    let sequence = 0
+    let applied = 0
     const load = () => {
       if (document.visibilityState === 'hidden') return
+      const current = ++sequence
       api(owner ? '/api/trainer/assistance' : '/api/me/assistance').then(data => {
-        if (alive) { setResult({ userId: user.id, data }); setError('') }
-      }).catch(() => { if (alive) setError('No pudimos actualizar las solicitudes. Revisa tu conexión.') })
+        if (alive && current > applied) { applied = current; setResult({ userId: user.id, data }); setError('') }
+      }).catch(() => { if (alive && current > applied) { applied = current; setError('No pudimos actualizar las solicitudes. Revisa tu conexión.') } })
+    }
+    const onChange = event => {
+      const detail = event.detail
+      applied = ++sequence
+      if (!owner && detail?.userId === user.id && detail.request) {
+        setResult({ userId: user.id, data: { request: detail.request } }); setError('')
+      } else load()
     }
     load(); const timer = setInterval(load, 10000)
-    window.addEventListener('assistance-change', load)
+    window.addEventListener('assistance-change', onChange)
+    window.addEventListener('online', load)
     document.addEventListener('visibilitychange', load)
-    return () => { alive = false; clearInterval(timer); window.removeEventListener('assistance-change', load); document.removeEventListener('visibilitychange', load) }
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('assistance-change', onChange); window.removeEventListener('online', load); document.removeEventListener('visibilitychange', load) }
   }, [allowed, user?.id, owner])
   return { allowed, data: result?.userId === user?.id ? result?.data : null, error }
 }
-const changed = () => window.dispatchEvent(new Event('assistance-change'))
+const changed = detail => window.dispatchEvent(new CustomEvent('assistance-change', { detail }))
 function RequestSheet({ close }) {
+  const userId = useRef(useStore.getState().user?.id).current
+  const requestId = useRef(crypto.randomUUID()).current
   const [kind, setKind] = useState('assistance')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -38,9 +52,10 @@ function RequestSheet({ close }) {
   const send = async () => {
     setBusy(true); setError('')
     try {
-      await api('/api/me/assistance', { method: 'POST', body: JSON.stringify({ kind, note }) })
-      changed(); close(); useUI.getState().toast('Solicitud enviada a tu entrenador')
-    } catch (e) { setError(e.message || 'No se pudo enviar. Inténtalo nuevamente.') }
+      if (useStore.getState().user?.id !== userId) throw Object.assign(new Error('Tu sesión cambió. Cierra este formulario y vuelve a abrirlo.'), { code: 'session-changed' })
+      const data = await api('/api/me/assistance', { method: 'POST', body: JSON.stringify({ kind, note, requestId }) })
+      changed({ userId, request: data.request }); close(); useUI.getState().toast(data.request.status === 'resolved' ? 'Esta solicitud ya fue atendida' : 'Solicitud enviada a tu entrenador')
+    } catch (e) { setError(e.status || e.code === 'session-changed' ? e.message : 'No se pudo conectar con el servidor. Tu mensaje sigue aquí; revisa tu conexión y vuelve a intentar.') }
     finally { setBusy(false) }
   }
   return <><h3>Pedir ayuda</h3>
@@ -78,7 +93,7 @@ export function TrainerAssistance() {
   }
   return <Section title="Solicitudes de ayuda" footer={error || actionError || pushMessage || 'Se actualizan cada 10 segundos mientras esta pantalla está abierta.'}>
     {!data ? <Row icon="clock" title="Consultando solicitudes…" /> : !data.requests.length ? <Row icon="checkCircle" iconTint="var(--green)" title="Sin solicitudes pendientes" subtitle="Tus alumnos pueden pedir ayuda desde Inicio o durante su sesión." /> : data.requests.map(r => <div key={r.id}>
-      <Row icon="bell" iconTint="var(--orange)" title={`${r.name} ${r.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}`} subtitle={`${new Date(r.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${r.status === 'attending' ? 'En atención' : 'Pendiente'}`} />
+      <Row icon="bell" iconTint="var(--orange)" title={`${r.name} ${r.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}`} subtitle={`${new Date(r.created).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${r.status === 'attending' ? 'En atención' : 'Pendiente'}`} />
       {r.note && <p className="trainer-note">{r.note}</p>}
       <div className="trainer-form-action">{r.status === 'pending' && <Button size="sm" variant="tinted" disabled={busy} onClick={() => update(r.id, 'attending')}>Voy a ayudarte</Button>} <Button size="sm" variant="plain" disabled={busy} onClick={() => update(r.id, 'resolved')}>Marcar atendida</Button></div>
     </div>)}

@@ -19,11 +19,11 @@ function cookie(uid) {
   const data = `${uid}:${Date.now() + 600000}:0`;
   return `gymsid=${data}.${crypto.createHmac('sha256', secret).update(data).digest('base64url')}`;
 }
-async function start(t, enabled = true) {
+async function start(t, enabled = true, extraDb = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gym-trainer-'));
   fs.mkdirSync(path.join(dir, 'users'));
   fs.writeFileSync(path.join(dir, 'secret'), secret);
-  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ users: [{ id: owner, name: 'Entrenador', admin: true, owner: true }, { id: pupil, name: 'Alumno' }, { id: other, name: 'Otra alumna' }, { id: secondAdmin, name: 'Otro administrador', admin: true }], creds: [], subs: [], invites: [] }));
+  fs.writeFileSync(path.join(dir, 'db.json'), JSON.stringify({ users: [{ id: owner, name: 'Entrenador', admin: true, owner: true }, { id: pupil, name: 'Alumno' }, { id: other, name: 'Otra alumna' }, { id: secondAdmin, name: 'Otro administrador', admin: true }], creds: [], subs: [], invites: [], ...extraDb }));
   const trainerState = { unit: 'kg', routines: [{ id: 'routine-1', name: 'Piernas', ex: [{ id: '0598', sets: 3, reps: 10, weight: 60 }] }], workouts: [] };
   fs.writeFileSync(path.join(dir, 'state-' + owner + '.json'), JSON.stringify(trainerState));
   let log = '';
@@ -203,4 +203,69 @@ test('assistance push goes only to owner, after persistence, without the private
   assert.ok(!JSON.stringify(sends).includes('PRIVATE-NOTE'));
   await routes['POST /api/me/assistance']({}, {});
   assert.equal(sends.length, 1);
+});
+
+test('assistance retries after resolution keep the same request, and a push failure keeps the inbox', async () => {
+  const db = { users: [{ id: owner, admin: true }, { id: pupil, name: 'Ana' }] };
+  let sends = 0, body = { kind: 'question', note: 'Privada', requestId: 'retry-request-001' };
+  const routes = trainerRoutes({ enabled: true, db, json: (res, status, data) => Object.assign(res, { status, body: data }), readBody: async () => body, readSession: () => db.users[1], requireOwner: () => db.users[0], isAdmin: u => !!u.admin, ownerId: () => owner, saveDb() {}, sendPush: async () => { sends++; throw new Error('simulated unavailable push'); } });
+  const first = {};
+  await routes['POST /api/me/assistance']({}, first);
+  assert.equal(first.status, 201);
+  const id = first.body.request.id;
+  body = { id, status: 'resolved' };
+  await routes['POST /api/trainer/assistance/status']({}, {});
+  db.trainerAssistance[pupil].created -= 120000;
+  body = { kind: 'question', note: 'Privada', requestId: 'retry-request-001' };
+  const retried = {};
+  await routes['POST /api/me/assistance']({}, retried);
+  assert.equal(retried.status, 200);
+  assert.equal(retried.body.request.id, id);
+  assert.equal(retried.body.request.status, 'resolved');
+  assert.equal(sends, 1);
+  body.requestId = 'new-request-002';
+  const next = {};
+  await routes['POST /api/me/assistance']({}, next);
+  assert.equal(next.status, 201);
+  assert.notEqual(next.body.request.id, id);
+  assert.equal(sends, 2);
+});
+test('assistance simultaneous sends create just one persisted request', async t => {
+  const h = await start(t);
+  const responses = await Promise.all(Array.from({ length: 8 }, () => h.req('POST', '/api/me/assistance', pupil, { kind: 'assistance', note: 'Revisar', requestId: 'parallel-001' })));
+  assert.equal(responses.filter(r => r.status === 201).length, 1);
+  assert.equal(new Set(responses.map(r => r.body.request.id)).size, 1);
+  assert.equal((await h.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 1);
+  assert.equal((await h.req('POST', '/api/me/assistance', other, { kind: 'question', note: '', requestId: {} })).status, 400);
+  await h.req('POST', '/api/admin/user/delete', owner, { id: pupil });
+  const saved = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json')));
+  assert.equal(saved.trainerAssistance[pupil], undefined);
+});
+
+test('assistance persistence failure rolls back the inbox and never sends a push', async () => {
+  const db = { users: [{ id: owner, admin: true }, { id: pupil, name: 'Ana' }] };
+  let sends = 0;
+  const routes = trainerRoutes({ enabled: true, db, json() {}, readBody: async () => ({ kind: 'assistance', note: '', requestId: 'save-fail-001' }), readSession: () => db.users[1], isAdmin: u => !!u.admin, ownerId: () => owner, saveDb() { throw new Error('disk unavailable'); }, sendPush: async () => { sends++; } });
+  await assert.rejects(routes['POST /api/me/assistance']({}, {}), /disk unavailable/);
+  assert.equal(db.trainerAssistance, undefined);
+  assert.equal(sends, 0);
+});
+
+
+test('assistance survives a fresh server boot and the same retry does not reopen a resolved request', async t => {
+  const h = await start(t);
+  const body = { kind: 'question', note: 'Persistir', requestId: 'restart-request-001' };
+  const first = await h.req('POST', '/api/me/assistance', pupil, body);
+  const id = first.body.request.id;
+  await h.req('POST', '/api/trainer/assistance/status', owner, { id, status: 'resolved' });
+  const stored = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json')));
+  stored.trainerAssistance[pupil].created -= 120000;
+  const rebooted = await start(t, true, stored);
+  const own = await rebooted.req('GET', '/api/me/assistance', pupil);
+  assert.equal(own.body.request.id, id);
+  assert.equal(own.body.request.status, 'resolved');
+  const retry = await rebooted.req('POST', '/api/me/assistance', pupil, body);
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.request.id, id);
+  assert.equal((await rebooted.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 0);
 });

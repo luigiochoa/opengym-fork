@@ -36,12 +36,15 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     const body = await readBody(req);
     if (!['assistance', 'question'].includes(body?.kind) || typeof body.note !== 'string' || body.note.length > 500)
       return json(res, 400, { error: 'Selecciona el motivo y usa hasta 500 caracteres.' });
+    if (body.requestId !== undefined && (typeof body.requestId !== 'string' || !/^[A-Za-z0-9_-]{8,80}$/.test(body.requestId)))
+      return json(res, 400, { error: 'Identificador de solicitud inválido.' });
     const previous = help()[user.id];
+    if (body.requestId && previous?.requestId === body.requestId) return json(res, 200, { request: previous });
     if (previous && previous.status !== 'resolved') return json(res, 200, { request: previous });
     if (previous && Date.now() - previous.created < 60000) return json(res, 429, { error: 'Espera un minuto antes de enviar otra solicitud.' });
     const trainer = db.users.find(u => u.id === ownerId() && !u.disabled);
     if (!trainer) return json(res, 503, { error: 'Tu entrenador no está disponible.' });
-    const request = { id: crypto.randomUUID(), userId: user.id, kind: body.kind, note: body.note.trim(), created: Date.now(), status: 'pending' };
+    const request = { id: crypto.randomUUID(), userId: user.id, kind: body.kind, note: body.note.trim(), ...(body.requestId ? { requestId: body.requestId } : {}), created: Date.now(), status: 'pending' };
     saveHelp({ ...help(), [user.id]: request });
     // Persist first. Push delivery is best effort; the inbox remains the source of truth.
     void sendPush(trainer.id, { title: 'Solicitud de un alumno', body: `${user.name} ${request.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}.`, tag: 'trainer-assistance-' + user.id, url: '#/trainer' }).catch(e => console.error('assistance push:', e.message));
