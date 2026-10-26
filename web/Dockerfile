@@ -89,6 +89,11 @@ COPY --from=build --chown=101:101 /app/frontend/dist /usr/share/nginx/html
 # catalogue/media/NOTICE.md. They ship inside the image; nothing is downloaded at start-up.
 COPY --chown=101:101 catalogue/media/ /usr/share/nginx/html/exercise-media/
 
+# Parent directories created by COPY can inherit restrictive build permissions.
+USER root
+RUN chown -R 101:101 /etc/nginx/templates /usr/share/nginx/html
+USER 101
+
 # Set Default ENVs for nginx
 ENV NGINX_PORT=80
 ENV BACKEND=api
