@@ -2,70 +2,95 @@ import '../trainer-pilot.css'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
+import { useUI } from '../store/useUI.js'
 import { exOr } from '../lib/exercises.js'
+import { exerciseNameFor } from '../lib/i18n-core.js'
+import { fmtDate } from '../lib/format.js'
 import { api } from '../lib/api.js'
-import { Button } from '../components/ui.jsx'
+import Icon from '../components/Icon.jsx'
+import { Button, Section, Row, SelectRow, MultiSelectRow } from '../components/ui.jsx'
 
-const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const dayOptions = [1, 2, 3, 4, 5, 6, 0].map(value => ({ value, label: DAYS[value] }))
+const lastSession = date => date ? `Última sesión · ${fmtDate(date)}` : 'Aún no ha registrado sesiones'
+
+function PupilDetail({ detail, pupil, close }) {
+  const workouts = detail.workouts.filter(w => w && Array.isArray(w.entries))
+  return <>
+    <h3>{pupil.name}</h3>
+    <Section>
+      <Row icon="chart" iconTint="var(--indigo)" title="Sesiones registradas" value={String(workouts.length)} />
+      <Row icon="calendar" iconTint="var(--orange)" title="Último entrenamiento" value={pupil.lastWorkout ? fmtDate(pupil.lastWorkout) : 'Sin sesiones'} />
+      {pupil.assignment && <Row icon="clipboard" title={pupil.assignment.bundle.name} subtitle={pupil.assignment.accepted ? 'Rutina recibida' : 'Pendiente de incorporar'} />}
+    </Section>
+    {pupil.assignment?.feedback && <Section title="Comentario del alumno"><p className="trainer-note">{pupil.assignment.feedback}</p></Section>}
+    <Section title="Historial de entrenamientos">
+      {workouts.length ? workouts.slice(0, 20).map((w, i) => <div className="trainer-session" key={w.id || i}>
+        <div className="trainer-session-head"><span className="trainer-session-name">{w.name || 'Entrenamiento'}</span><span className="small muted">{w.d ? fmtDate(w.d) : 'Sin fecha'}</span></div>
+        {w.entries.filter(e => Array.isArray(e?.sets)).map((e, j) => <div className="trainer-lift" key={j}>
+          <span>{e.name || e.n || exerciseNameFor(exOr(e.id))}</span>
+          <span className="small muted">{e.sets.filter(s => s?.done).map(s => `${s.w ?? '–'} ${detail.unit} × ${s.r ?? '–'}`).join(' · ') || 'Sin series completadas'}</span>
+        </div>)}
+      </div>) : <Row icon="dumbbell" iconTint="var(--surface-3)" title="Todavía no hay entrenamientos" subtitle="Las sesiones aparecerán aquí cuando tu alumno las guarde." />}
+    </Section>
+    <Button onClick={close}>Cerrar</Button>
+  </>
+}
+
 export default function Trainer() {
   const nav = useNavigate()
   const routines = useStore(s => s.S.routines)
   const [pupils, setPupils] = useState([])
   const [routineId, setRoutineId] = useState('')
+  const [pupilId, setPupilId] = useState('')
   const [days, setDays] = useState([])
-  const [detail, setDetail] = useState(null)
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const toast = message => useUI.getState().toast(message)
   const load = () => api('/api/trainer/pupils').then(r => setPupils(r.pupils))
-  useEffect(() => { load().catch(() => setMessage('No se pudieron cargar los alumnos.')) }, [])
-  const assign = async pupil => {
-    setBusy(true); setMessage('')
+  useEffect(() => { load().catch(() => setError('No se pudieron cargar los alumnos.')).finally(() => setLoading(false)) }, [])
+  const assign = async () => {
+    const pupil = pupils.find(p => p.id === pupilId)
+    if (!pupil) return
+    setBusy(true); setError('')
     try {
       await useStore.getState().pushState()
       await api('/api/trainer/assign', { method: 'POST', body: JSON.stringify({ userId: pupil.id, routineId, days }) })
-      await load(); setMessage(`Rutina enviada a ${pupil.name}. La verá al abrir Inicio.`)
-    } catch { setMessage('No se pudo enviar. Comprueba la conexión y que la rutina esté sincronizada.') }
+      await load(); toast(`Rutina enviada a ${pupil.name}`)
+    } catch { setError('No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo.') }
     finally { setBusy(false) }
   }
   const inspect = async pupil => {
-    try { setDetail(await api('/api/admin/user?id=' + encodeURIComponent(pupil.id))); setMessage('') }
-    catch { setMessage('No se pudo cargar el historial.') }
+    try {
+      const detail = await api('/api/admin/user?id=' + encodeURIComponent(pupil.id))
+      useUI.getState().openSheet(close => <PupilDetail detail={detail} pupil={pupil} close={close} />)
+    } catch { toast('No se pudo cargar el historial. Vuelve a intentarlo.') }
   }
-  return <main className="narrow trainer-pilot">
-    <div className="hdr"><div><h1>Mis alumnos</h1></div><Button size="sm" onClick={() => nav('/home')}>Volver</Button></div>
-    <p>Invita a tus alumnos, envía una rutina y revisa sus sesiones.</p>
-    <Button variant="tinted" onClick={() => nav('/admin')}>Invitaciones y accesos</Button>
-    <section className="card pilot-card" style={{ padding: 16, margin: '16px 0' }}>
-      <h2 className="pilot-title" style={{ fontSize: 20 }}>Rutina para enviar</h2>
-      <label htmlFor="trainer-routine">Elige una de tus rutinas</label>
-      <select className="input" id="trainer-routine" value={routineId} onChange={e => setRoutineId(e.target.value)} style={{ display: 'block', width: '100%', margin: '8px 0' }}>
-        <option value="">Seleccionar rutina</option>
-        {routines.filter(r => r.ex?.length).map(r => <option value={r.id} key={r.id}>{r.name}</option>)}
-      </select>
-      <fieldset style={{ border: 0, padding: 0 }}><legend>Días de entrenamiento (opcional)</legend>
-        {[1, 2, 3, 4, 5, 6, 0].map(d => <label key={d} style={{ display: 'inline-flex', gap: 4, padding: 6 }}><input type="checkbox" checked={days.includes(d)} onChange={() => setDays(ds => ds.includes(d) ? ds.filter(x => x !== d) : [...ds, d])} />{DAYS[d]}</label>)}
-      </fieldset>
-      {!routines.some(r => r.ex?.length) && <p>Crea primero una rutina en Plan.</p>}
-    </section>
-    {message && <p role="status">{message}</p>}
-    {!pupils.length && <p>No hay alumnos todavía. Crea una invitación para comenzar.</p>}
-    {pupils.map(p => <section className="card pilot-card" key={p.id} style={{ padding: 16, marginBottom: 12 }}>
-      <h2 className="pilot-title" style={{ fontSize: 20 }}>{p.name}{p.disabled ? ' · Suspendido' : ''}</h2>
-      <p>{p.workouts} sesiones · Última: {p.lastWorkout || 'Sin entrenamientos'}</p>
-      {p.unavailable && <p role="alert">Los datos de este alumno no se pueden leer. Revisa el respaldo antes de continuar.</p>}
-      {p.assignment && <p>{p.assignment.bundle.name} · {p.assignment.accepted ? 'Recibida' : 'Pendiente de incorporar'}</p>}
-      {p.assignment?.feedback && <blockquote>{p.assignment.feedback}</blockquote>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <Button size="sm" variant="tinted" disabled={busy || !routineId || p.disabled || p.unavailable} onClick={() => assign(p)}>Enviar rutina</Button>
-        <Button size="sm" disabled={busy || p.unavailable} onClick={() => inspect(p)}>Ver historial</Button>
-      </div>
-    </section>)}
-    {detail && <section className="card pilot-card" style={{ padding: 16, marginBottom: 20 }}>
-      <h2>Historial de {detail.user.name}</h2><Button onClick={() => setDetail(null)}>Cerrar historial</Button>
-      {detail.workouts.length ? detail.workouts.slice(0, 20).map((w, i) => <div key={w.id || i} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
-        <strong>{w.d} · {w.name || 'Entrenamiento'}</strong>
-        {(w.entries || []).filter(e => Array.isArray(e?.sets)).map((e, j) => <p className="small" key={j}>{e.name || e.n || exOr(e.id).n}: {e.sets.filter(s => s?.done).map(s => `${s.w ?? '–'} ${detail.unit} × ${s.r ?? '–'}`).join(' · ')}</p>)}
-      </div>) : <p>Sin sesiones registradas.</p>}
-    </section>}
-  </main>
+  const available = pupils.filter(p => !p.disabled && !p.unavailable)
+  const routineOptions = [{ value: '', label: 'Seleccionar rutina' }, ...routines.filter(r => r.ex?.length).map(r => ({ value: r.id, label: r.name }))]
+  const pupilOptions = [{ value: '', label: 'Seleccionar alumno' }, ...available.map(p => ({ value: p.id, label: p.name }))]
+  return <div className="narrow trainer-pilot">
+    <div className="hdr">
+      <div><h1>Mis alumnos</h1><div className="sub">Rutinas y seguimiento</div></div>
+      <button className="iconbtn" data-back="/home" aria-label="Volver a Inicio" onClick={() => nav('/home')}><Icon name="chevronLeft" /></button>
+    </div>
+    <Section>
+      <Row icon="personCircle" iconTint="var(--indigo)" title="Invitaciones y accesos" subtitle="Añade alumnos a tu equipo" accessory="chevron" onClick={() => nav('/admin')} />
+    </Section>
+    <Section title="Asignar una rutina" footer={routineOptions.length > 1 ? 'El alumno la recibirá en Inicio. Su historial y las demás rutinas se conservan.' : 'Crea una rutina con ejercicios en Plan para poder enviarla.'}>
+      <SelectRow icon="dumbbell" title="Rutina" value={routineId} options={routineOptions} onChange={setRoutineId} sheetTitle="Seleccionar rutina" />
+      <SelectRow icon="person" iconTint="var(--indigo)" title="Alumno" value={pupilId} options={pupilOptions} onChange={setPupilId} sheetTitle="Seleccionar alumno" />
+      <MultiSelectRow icon="calendar" iconTint="var(--orange)" title="Días" values={days} options={dayOptions} onToggle={d => setDays(ds => ds.includes(d) ? ds.filter(x => x !== d) : [...ds, d])} sheetTitle="Días de entrenamiento" noneLabel="Sin horario fijo" doneLabel="Listo" />
+      <div className="trainer-form-action"><Button variant="tinted" icon="checkCircle" disabled={busy || !routineId || !pupilId} onClick={assign}>{busy ? 'Enviando…' : 'Enviar rutina'}</Button></div>
+    </Section>
+    {error && <p className="trainer-error" role="alert">{error}</p>}
+    <Section title={loading ? 'Alumnos' : `Alumnos · ${pupils.length}`} footer={pupils.length ? 'Toca un alumno para ver sus sesiones y comentarios.' : null}>
+      {loading ? <Row title="Cargando alumnos…" /> : pupils.length ? pupils.map(p => <Row key={p.id} icon="person" iconTint={p.disabled ? 'var(--surface-3)' : 'var(--indigo)'} title={p.name}
+        subtitle={p.unavailable ? 'Datos no disponibles' : p.disabled ? 'Acceso suspendido' : `${p.workouts} ${p.workouts === 1 ? 'sesión' : 'sesiones'} · ${lastSession(p.lastWorkout)}`}
+        accessory={p.unavailable ? 'none' : 'chevron'} onClick={p.unavailable ? undefined : () => inspect(p)}>
+        {p.assignment && <span className={'tag' + (p.assignment.accepted ? ' acc' : '')}>{p.assignment.accepted ? 'Recibida' : 'Pendiente'}</span>}
+      </Row>) : <Row icon="personCircle" iconTint="var(--surface-3)" title="Tu primer alumno" subtitle="Crea una invitación para empezar a acompañar su entrenamiento." accessory="chevron" onClick={() => nav('/admin')} />}
+    </Section>
+  </div>
 }

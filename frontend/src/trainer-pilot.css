@@ -1,9 +1,19 @@
-.trainer-pilot{padding-bottom:110px}
-.pilot-card{display:grid;gap:12px}
-.pilot-card .pilot-title{color:var(--label);font-weight:600}
-.pilot-card p{line-height:1.45}
-.pilot-card label{line-height:1.4}
-.pilot-card select{min-height:48px;cursor:pointer;color-scheme:dark}
-:root[data-theme="light"] .pilot-card select{color-scheme:light}
-.pilot-card input[type="checkbox"]{accent-color:var(--acc);width:18px;height:18px}
-.pilot-card blockquote{margin:0;padding:10px 14px;border-inline-start:3px solid var(--acc);background:var(--surface-2);border-radius:6px}
+/* Layout only: grouped rows, sheets, fields and buttons come from the shared UI. */
+.trainer-pilot{padding-bottom:24px}
+.trainer-pilot .lrow-m,.trainer-assignment .lrow-m{min-width:0}
+.trainer-pilot .lrow-s,.trainer-assignment .lrow-s{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.trainer-pilot .tag,.trainer-assignment .tag{flex:none;white-space:nowrap}
+.trainer-form-action{padding:4px 12px 12px}
+.trainer-error{font-size:13px;line-height:1.4;color:var(--red);padding:0 4px 14px}
+.trainer-assignment .trainer-error{padding:0 14px 12px}
+.trainer-note{padding:14px;font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.trainer-session{padding:14px}
+.trainer-session+.trainer-session{border-top:var(--hair) solid var(--sep)}
+.trainer-session-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+.trainer-session-name{font-size:17px;font-weight:500;letter-spacing:-.012em}
+.trainer-session-head .small{white-space:nowrap}
+.trainer-lift{display:flex;flex-direction:column;gap:3px;font-size:15px;line-height:1.4}
+.trainer-lift+.trainer-lift{margin-top:10px}
+.trainer-sheet-intro{margin:-4px 0 18px;line-height:1.4}
+.trainer-field-label{display:block;color:var(--label-2);font-size:13px;margin:0 4px 7px}
+.trainer-character-count{text-align:end;margin-bottom:16px}

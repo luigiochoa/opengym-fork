@@ -2,9 +2,33 @@ import '../trainer-pilot.css'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
+import { useUI } from '../store/useUI.js'
 import { api } from '../lib/api.js'
 import { applyTrainerPlan } from '../lib/trainer-plan.js'
-import { Button } from './ui.jsx'
+import { Button, Section, Row, TextArea } from './ui.jsx'
+
+function FeedbackSheet({ assignment, saved, close }) {
+  const [text, setText] = useState(assignment.feedback || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const send = async () => {
+    setBusy(true); setError('')
+    try {
+      await api('/api/trainer/feedback', { method: 'POST', body: JSON.stringify({ id: assignment.id, text }) })
+      saved(text); close(); useUI.getState().toast('Comentario enviado al entrenador')
+    } catch { setError('No se pudo enviar. Tu comentario sigue aquí para que lo intentes de nuevo.') }
+    finally { setBusy(false) }
+  }
+  return <>
+    <h3>Comentario para tu entrenador</h3>
+    <p className="muted small trainer-sheet-intro">Cuéntale a {assignment.trainerName} cómo te fue o qué necesitas ajustar.</p>
+    <label className="trainer-field-label" htmlFor="trainer-feedback">Tu comentario</label>
+    <TextArea id="trainer-feedback" value={text} maxLength={1000} placeholder="Cómo te sentiste, dudas o ajustes…" onChange={e => setText(e.target.value)} />
+    <p className="sect-f trainer-character-count">{text.length}/1000</p>
+    {error && <p role="alert" className="trainer-error">{error}</p>}
+    <Button variant="primary" disabled={busy} onClick={send}>{busy ? 'Enviando…' : 'Enviar comentario'}</Button>
+  </>
+}
 
 export function TrainerHome() {
   const user = useStore(s => s.user)
@@ -12,26 +36,25 @@ export function TrainerHome() {
   const state = useStore(s => s.S)
   const nav = useNavigate()
   const [assignment, setAssignment] = useState(null)
-  const [feedback, setFeedback] = useState('')
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!enabled || !user || user.admin) return
     let active = true
     const load = () => api('/api/trainer/assignment').then(r => {
-      if (active) { setAssignment(r.assignment); setFeedback(r.assignment?.feedback || '') }
-    }).catch(() => { if (active) setMessage('No se pudo consultar el plan. Revisa tu conexión.') })
+      if (active) { setAssignment(r.assignment); setError('') }
+    }).catch(() => { if (active) setError('No se pudo consultar tu rutina. Revisa tu conexión.') })
     load()
     const refresh = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', refresh)
     return () => { active = false; document.removeEventListener('visibilitychange', refresh) }
   }, [enabled, user?.id])
   if (!enabled || !user) return null
-  if (user.owner) return <div className="card pilot-card" style={{ padding: 16, marginBottom: 16 }}><Button variant="tinted" onClick={() => nav('/trainer')}>Mis alumnos</Button></div>
-  if (user.admin || !assignment) return message ? <p role="status">{message}</p> : null
+  if (user.owner) return <Section><Row icon="personCircle" iconTint="var(--indigo)" title="Mis alumnos" subtitle="Rutinas y seguimiento" accessory="chevron" onClick={() => nav('/trainer')} /></Section>
+  if (user.admin || !assignment) return error ? <p role="status" className="sect-f">{error}</p> : null
   const imported = state.trainerApplied?.includes(assignment.id)
   const accept = async () => {
-    setBusy(true); setMessage('')
+    setBusy(true); setError('')
     try {
       const store = useStore.getState()
       await store.pullState()
@@ -39,26 +62,17 @@ export function TrainerHome() {
       await useStore.getState().pushState()
       await api('/api/trainer/assignment/accept', { method: 'POST', body: JSON.stringify({ id: assignment.id }) })
       setAssignment(a => ({ ...a, accepted: Date.now() }))
-      setMessage('Plan incorporado. Lo encontrarás en Plan.')
-    } catch { setMessage('No se pudo confirmar. Conservamos el plan en este dispositivo; vuelve a intentar cuando tengas conexión.') }
+      useUI.getState().toast('Plan incorporado. Lo encontrarás en Plan.')
+    } catch { setError('No se pudo confirmar. El plan se conserva en este dispositivo; vuelve a intentar cuando tengas conexión.') }
     finally { setBusy(false) }
   }
-  const sendFeedback = async () => {
-    setBusy(true)
-    try { await api('/api/trainer/feedback', { method: 'POST', body: JSON.stringify({ id: assignment.id, text: feedback }) }); setMessage('Comentario enviado al entrenador.') }
-    catch { setMessage('No se pudo enviar el comentario. Vuelve a intentarlo.') }
-    finally { setBusy(false) }
-  }
-  return <section className="card pilot-card" style={{ padding: 16, marginBottom: 16 }} aria-label="Plan del entrenador">
-    <h2 style={{ fontSize: 20 }}>Tu entrenador: {assignment.trainerName}</h2>
-    <p>{assignment.bundle.name}</p>
-    {!assignment.accepted && <><p className="muted">Añade esta rutina a tu plan. Los días indicados se actualizarán; tu historial y las demás rutinas se conservan.</p><Button variant="primary" disabled={busy} onClick={accept}>{busy ? 'Guardando…' : imported ? 'Confirmar sincronización' : 'Incorporar rutina'}</Button></>}
-    {assignment.accepted && <>
-      <p className="muted">Plan recibido. Registra tus sesiones para que tu entrenador pueda revisarlas.</p>
-      <label htmlFor="trainer-feedback">Comentario para tu entrenador</label>
-      <textarea className="input" id="trainer-feedback" value={feedback} maxLength={1000} onChange={e => setFeedback(e.target.value)} style={{ width: '100%', minHeight: 70, margin: '8px 0' }} />
-      <Button disabled={busy} onClick={sendFeedback}>Enviar comentario</Button>
-    </>}
-    {message && <p role="status">{message}</p>}
-  </section>
+  const feedback = () => useUI.getState().openSheet(close => <FeedbackSheet assignment={assignment} saved={text => setAssignment(a => ({ ...a, feedback: text }))} close={close} />)
+  return <Section title="Tu entrenador" className="trainer-assignment" footer={!assignment.accepted ? 'Se actualizarán los días indicados. Tu historial y las demás rutinas se conservan.' : null}>
+    <Row icon="clipboard" title={assignment.bundle.name} subtitle={`De ${assignment.trainerName}`}>
+      <span className={'tag' + (assignment.accepted ? ' acc' : '')}>{assignment.accepted ? 'Recibida' : 'Nueva'}</span>
+    </Row>
+    {!assignment.accepted ? <div className="trainer-form-action"><Button variant="tinted" disabled={busy} onClick={accept}>{busy ? 'Guardando…' : imported ? 'Confirmar sincronización' : 'Incorporar rutina'}</Button></div> :
+      <Row icon="note" iconTint="var(--orange)" title={assignment.feedback ? 'Tu comentario' : 'Comentar al entrenador'} subtitle={assignment.feedback || 'Cuéntale cómo va tu entrenamiento'} accessory="chevron" onClick={feedback} />}
+    {error && <p role="alert" className="trainer-error">{error}</p>}
+  </Section>
 }

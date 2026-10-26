@@ -155,6 +155,15 @@ export default function Plan() {
         { icon: 'note', label: t('Print / Save as PDF'), disabled: !has, onClick: printWholePlan },
         { icon: 'download', label: t('Import a plan file'), onClick: () => fileRef.current?.click() },
         { icon: 'clipboard', label: t('Load starter plan'), onClick: starterPlanSheet },
+        ...(/Fortachones/i.test(APP_NAME) && !hasTeamSarmientoLegs(S) ? [{ icon: 'legs', label: 'Legs Day · Team Sarmiento', sub: 'Añadir la rutina del equipo a tus rutinas', onClick: () => {
+          update(s => {
+            s.routines.push(teamSarmientoLegsRoutine())
+            s.customEx ||= []
+            if (!s.customEx.some(e => e.id === TEAM_SARMIENTO_HIP_THRUST.id)) s.customEx.push({ ...TEAM_SARMIENTO_HIP_THRUST })
+          })
+          setView('routines')
+          useUI.getState().toast('Rutina Team Sarmiento añadida')
+        } }] : []),
       ],
     })
   }
@@ -163,11 +172,6 @@ export default function Plan() {
   const mode = scheduleModeOf(S)
 
   return <div className="narrow plan">
-    {/Fortachones/i.test(APP_NAME) && !hasTeamSarmientoLegs(S) && <Button onClick={() => useStore.getState().update(s => {
-      s.routines.push(teamSarmientoLegsRoutine())
-      s.customEx ||= []
-      if (!s.customEx.some(e => e.id === TEAM_SARMIENTO_HIP_THRUST.id)) s.customEx.push({ ...TEAM_SARMIENTO_HIP_THRUST })
-    })}>Cargar Legs Day · Team Sarmiento</Button>}
     <div className="hdr">
       <div><h1>{t('Plan')}</h1><div className="sub">{mode === 'rotation' ? t('Your routines in a loop') : t('Your weekly routine')}</div></div>
       <div className="hdr-actions">

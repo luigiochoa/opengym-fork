@@ -32,12 +32,12 @@ La actualización incluye medios de ejercicios con licencia separada. Conservar 
 
 - Inicio → **Mis alumnos** → **Invitaciones y accesos** para crear una invitación por alumno.
 - Crear rutinas desde Plan y esperar a que se sincronicen.
-- En **Mis alumnos**, elegir una rutina y opcionalmente sus días; pulsar **Enviar rutina** en el alumno deseado.
+- En **Mis alumnos**, elegir rutina, alumno y opcionalmente sus días; pulsar **Enviar rutina**. Los selectores usan los mismos paneles de la app.
 - El alumno verá el plan al entrar en Inicio o volver a la app y deberá incorporarlo.
 - Los días elegidos se actualizan; los demás días, las rutinas previas y el historial se conservan. Las asignaciones de varias rutinas se envían e incorporan una a una. Hay una asignación actual por alumno: enviar otra sustituye la tarjeta pendiente, no elimina lo ya incorporado.
 - El estado **Recibida** se confirma únicamente después de que el plan esté sincronizado en el servidor. Una desconexión permite reintentar sin duplicar la rutina.
-- El alumno registra su sesión en el tracker habitual y puede enviar un comentario desde Inicio.
-- El entrenador ve última sesión, número de entrenamientos, estado del plan y comentario; **Ver historial** muestra las series registradas.
+- El alumno registra su sesión en el tracker habitual. En Inicio, toca **Comentar al entrenador** (o **Tu comentario**) para escribir desde un panel y enviarlo.
+- El entrenador ve última sesión, número de entrenamientos y estado del plan en la lista. Al tocar un alumno se abre su ficha con el comentario y las series registradas.
 
 ## Validación manual antes de invitar alumnos reales
 
