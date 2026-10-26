@@ -19,10 +19,22 @@ fi
 cd "$ROOT"
 
 if [[ "$PULL" == "--pull" ]]; then
-  # VPS checkouts contain generated brand assets. Resetting to origin/main is
-  # intentional; source changes must be made locally and pushed first.
-  git fetch origin main
-  git reset --hard origin/main
+  if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Hay cambios locales. Revísalos antes de actualizar; no se borrarán automáticamente." >&2
+    exit 1
+  fi
+  git fetch origin
+  git merge --ff-only "@{upstream}"
+fi
+
+# Stop writes while taking a coherent backup. Restart the old API if backup fails.
+if [[ -d "$ROOT/data" ]]; then
+  docker compose stop api
+  if ! bash "$ROOT/pack/scripts/backup-data.sh"; then
+    docker compose start api
+    exit 1
+  fi
+  docker compose start api
 fi
 
 "$ROOT/pack/scripts/apply-brand.sh" "$CLIENT"

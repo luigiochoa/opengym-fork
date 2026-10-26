@@ -1,3 +1,5 @@
+> **POC actual: un entrenador y sus alumnos.** Ver [PILOT.md](PILOT.md). La gestión comercial de gimnasios queda fuera del piloto.
+
 # Pack inicial — openGym fork white-label
 
 > **Workspace activo:** Fortachones → https://fortachones.luigiochoa.com · cliente `fortachones-gym`.  

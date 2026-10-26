@@ -4,6 +4,11 @@
   "webDir": "dist",
   "backgroundColor": "#0c0e12",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable"
+    }
   }
 }

@@ -4,9 +4,10 @@
 // (rest-day override, missing routine, zero-workout history, no synced state, superset links).
 import { describe, beforeAll, afterAll, beforeEach, test, expect, vi } from 'vitest'
 import { buildDemoState } from '../../frontend/src/lib/demoSeed.js'
-import { EXDB } from '../../frontend/src/lib/exercises.js'
+import { EXDB, exOr } from '../../frontend/src/lib/exercises.js'
 import { _seedStateForTests } from '../src/state.js'
 import { TOOLS } from '../src/tools.js'
+import { bestSetOf } from '../../frontend/src/lib/onerm.js'
 
 // Re-stated here so the assertions stand alone without reaching into lib internals to learn
 // the demo state's exact values.
@@ -70,6 +71,15 @@ describe('list_routines', () => {
     })
   })
 
+  test('reports progression exclusion in routine summaries and details', () => {
+    S.routines[0].excludeFromProgression = true
+    const summary = call('list_routines').routines.find(r => r.id === S.routines[0].id)
+    const detail = call('get_routine', { routine_id: S.routines[0].id })
+
+    expect(summary.exclude_from_progression).toBe(true)
+    expect(detail.exclude_from_progression).toBe(true)
+  })
+
   test('list_routines entries line up with get_routine (no id drift)', () => {
     const list = call('list_routines').routines
     list.forEach(summary => {
@@ -96,6 +106,92 @@ describe('get_routine', () => {
       expect(e.summary).toMatch(/\d+\s*×\s*\d+/)
       expect(e.superset_group === null || typeof e.superset_group === 'string').toBe(true)
     })
+  })
+
+  test('resolves custom exercises from the current profile state', () => {
+    const custom = { id: 'cx-sled-drag', n: 'Sled drag', bp: 'upper legs' }
+    S.customEx = [custom]
+    S.routines[0].ex.push({ id: custom.id, sets: 3, reps: 20 })
+
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.exercises.at(-1)).toMatchObject({
+      id: custom.id,
+      name: 'Sled drag',
+      body_part: 'upper legs'
+    })
+  })
+
+  test('returns both bounds of a reps range', () => {
+    const cfg = S.routines[0].ex[0]
+    Object.assign(cfg, { mode: 'reps', reps: 8, repsMin: 8, repsMax: 12 })
+
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.exercises[0]).toMatchObject({ reps: 8, reps_min: 8, reps_max: 12 })
+  })
+
+  test('summarises a double-progression range as the range, not as its top', () => {
+    Object.assign(S.routines[0].ex[0], { mode: 'reps', sets: 3, reps: 12, repsMin: 8, weight: 40 })
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.exercises[0].summary).toBe('3 × 8–12 · 40 kg')
+  })
+
+  test('reports pyramid sets as the per-set targets, not as sets × reps', () => {
+    const cfg = S.routines[0].ex[0]
+    Object.assign(cfg, { mode: 'reps', sets: 5, reps: 12, weight: 0, pyramid: [12, 8, 6, 'max', 12] })
+    delete cfg.repsMin
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.exercises[0]).toMatchObject({ pyramid: [12, 8, 6, 'max', 12], policy: 'off', summary: '12 · 8 · 6 · Max · 12' })
+  })
+
+  test('reports a pyramid\'s planned weight per set, and leaves it out when none is planned (#445)', () => {
+    const cfg = S.routines[0].ex[0]
+    Object.assign(cfg, { mode: 'reps', sets: 3, reps: 12, weight: 0, pyramid: [12, 8, 6], pyramidWeight: [40, 0, 60] })
+    delete cfg.repsMin
+    expect(call('get_routine', { routine_id: S.routines[0].id }).exercises[0].pyramid_weight).toEqual([40, 0, 60])
+    delete cfg.pyramidWeight
+    expect(call('get_routine', { routine_id: S.routines[0].id }).exercises[0].pyramid_weight).toBeUndefined()
+  })
+
+  test('reports an exercise\'s own rest, and leaves it out when it inherits the timer', () => {
+    S.routines[0].ex[0].restSec = 180
+    delete S.routines[0].ex[1]?.restSec
+
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.exercises[0].rest_sec).toBe(180)
+    // An exercise with no rest of its own inherits the global timer. Absent says that;
+    // a zero would read as "no rest at all", which is a different prescription.
+    expect(JSON.parse(JSON.stringify(r)).exercises[1]).not.toHaveProperty('rest_sec')
+  })
+
+  test('projects routine and exercise progression rules from prog', () => {
+    S.routines[0].prog = 'greyskull'
+    S.routines[0].ex[0].prog = 'double'
+
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r).toMatchObject({ policy: 'greyskull', policy_name: 'Greyskull LP' })
+    expect(r.exercises[0].policy_override).toBe('double')
+  })
+
+  test('a routine with no prog reports the policy the app actually runs, not off', () => {
+    delete S.routines[0].prog
+    delete S.routines[0].ex[0].prog
+
+    // policyFor defaults reps to linear (progression.js:73) and RoutineEdit.jsx:59 shows
+    // that same default, so reporting 'off' here would misdescribe every untouched routine.
+    const r = call('get_routine', { routine_id: S.routines[0].id })
+    expect(r.policy).toBe('linear')
+    expect(r.exercises[0].policy).toBe('linear')
+    expect(r.exercises[0].policy_override).toBeNull()
+  })
+
+  test('a policy the mode cannot run is clamped, not echoed back raw', () => {
+    S.routines[0].prog = 'greyskull'                       // reps-only policy
+    S.customEx = [{ id: 'cx-plank', n: 'Plank', bp: 'waist' }]
+    S.routines[0].ex.push({ id: 'cx-plank', mode: 'time', sets: 3, sec: 60 })
+
+    const view = call('get_routine', { routine_id: S.routines[0].id }).exercises.at(-1)
+    expect(view.mode).toBe('time')
+    expect(view.policy).toBe('off')      // POLICIES_FOR.time excludes greyskull
   })
 
   test('throws ENOENT on a bogus routine id', () => {
@@ -193,6 +289,112 @@ describe('get_week_plan', () => {
   })
 })
 
+/* ---------- get_week_plan — coach week (S.queue) and pins ---------- */
+
+describe('get_week_plan — coach week and pins', () => {
+  // Today is the pinned Monday 2026-07-27. The planner's queue reuses the demo routines as its
+  // three sessions; the queue was applied that morning.
+  const rid = name => S.routines.find(x => x.name === name).id
+  const SINCE = () => Date.parse('2026-07-27T08:00:00')
+  const coachWeek = (over = {}) => {
+    S.queue = { ids: [rid('Push Day'), rid('Pull Day'), rid('Leg Day')], since: SINCE(), startsOn: FAKE_TODAY_ISO, label: 'W1', ...over }
+    S.week = {}
+  }
+  const logged = (name, d = FAKE_TODAY_ISO) => ({ id: 'w-' + name, d, start: SINCE() + 3600000, end: SINCE() + 7200000, routineIds: [rid(name)], routineId: rid(name), name, entries: [] })
+
+  test('without a coach week: coach_week is null, days run seven dates from today by the weekday plan', () => {
+    const r = call('get_week_plan')
+    expect(r.coach_week).toBeNull()
+    expect(r.days.map(d => d.date)).toEqual(['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31', '2026-08-01', '2026-08-02'])
+    expect(r.days[0]).toMatchObject({ weekday: 1, weekday_name: 'Monday', routine_names: ['Push Day'], planned_by: 'weekday' })
+    expect(r.days[1]).toMatchObject({ routine_ids: [], routine_names: [], planned_by: 'rest' })
+    expect(r.days[2]).toMatchObject({ routine_names: ['Pull Day'], planned_by: 'weekday' })
+    expect(r.today_routine_ids).toEqual([rid('Push Day')])
+    expect(r.today_routine_names).toEqual(['Push Day'])
+  })
+
+  test('a weekday holding several routines (combine routines) lists them all; the singular fields keep the first', () => {
+    S.week[2] = [rid('Pull Day'), rid('Leg Day')]
+    const r = call('get_week_plan')
+    const tue = r.weekdays.find(d => d.weekday === 2)
+    expect(tue.routine_ids).toEqual([rid('Pull Day'), rid('Leg Day')])
+    expect(tue.routine_names).toEqual(['Pull Day', 'Leg Day'])
+    expect(tue.routine_id).toBe(rid('Pull Day'))
+    expect(tue.routine_name).toBe('Pull Day')
+    expect(r.days[1]).toMatchObject({ routine_names: ['Pull Day', 'Leg Day'], planned_by: 'weekday' })
+    // …and a legacy single id still reads as a one-item list.
+    expect(r.weekdays.find(d => d.weekday === 1).routine_ids).toEqual([rid('Push Day')])
+  })
+
+  test('a coach week: today is the first undone session, the other days carry nothing, and the week is described', () => {
+    coachWeek()
+    const r = call('get_week_plan')
+    expect(r.coach_week).toMatchObject({ label: 'W1', starts_on: FAKE_TODAY_ISO, waiting: false, complete: false })
+    expect(r.coach_week.sessions.map(x => x.state)).toEqual(['next', 'later', 'later'])
+    expect(r.coach_week.sessions.map(x => x.pinned_to)).toEqual([null, null, null])
+    expect(r.today_routine_name).toBe('Push Day')
+    expect(r.days[0]).toMatchObject({ routine_names: ['Push Day'], planned_by: 'coach' })
+    r.days.slice(1).forEach(d => expect(d).toMatchObject({ routine_ids: [], planned_by: 'rest' }))
+    // The weekday table is the user's own plan only — empty here.
+    r.weekdays.forEach(d => expect(d.routine_ids).toEqual([]))
+  })
+
+  test('a done session moves today to the next one; the rest of the week still floats', () => {
+    coachWeek()
+    S.workouts.push(logged('Push Day'))
+    const r = call('get_week_plan')
+    expect(r.coach_week.sessions.map(x => x.state)).toEqual(['done', 'next', 'later'])
+    expect(r.today_routine_name).toBe('Pull Day')
+    expect(r.days[0].planned_by).toBe('coach')
+  })
+
+  test('a session pinned to a date sits there, is skipped today, and the pin is fulfilled once done', () => {
+    coachWeek()
+    S.dayPlan['2026-07-29'] = rid('Leg Day')
+    let r = call('get_week_plan')
+    expect(r.coach_week.sessions[2]).toMatchObject({ state: 'pinned', pinned_to: '2026-07-29' })
+    expect(r.days[2]).toMatchObject({ date: '2026-07-29', routine_names: ['Leg Day'], planned_by: 'pinned' })
+    expect(r.today_routine_name).toBe('Push Day')
+    // Done early: the pin reads as no override and Wednesday goes back to floating (nothing there).
+    S.workouts.push(logged('Leg Day'))
+    r = call('get_week_plan')
+    expect(r.coach_week.sessions[2].state).toBe('done')
+    expect(r.days[2]).toMatchObject({ routine_ids: [], planned_by: 'rest' })
+  })
+
+  test('a coach week waiting for its start day: today is the weekday plan, the week says when it starts', () => {
+    coachWeek({ startsOn: '2026-08-03' })
+    S.week = { 1: rid('Push Day') }
+    const r = call('get_week_plan')
+    expect(r.coach_week).toMatchObject({ waiting: true, starts_on: '2026-08-03' })
+    expect(r.days[0]).toMatchObject({ routine_names: ['Push Day'], planned_by: 'weekday' })
+  })
+
+  test('the user\'s own weekday routine rides along beside the coach session', () => {
+    coachWeek({ ids: [rid('Push Day'), rid('Pull Day')] })
+    S.week = { 1: [rid('Leg Day')] }
+    const r = call('get_week_plan')
+    expect(r.today_routine_names).toEqual(['Push Day', 'Leg Day'])
+    expect(r.today_routine_name).toBe('Push Day')
+    expect(r.days[0].planned_by).toBe('coach')
+    expect(r.weekdays.find(d => d.weekday === 1).routine_names).toEqual(['Leg Day'])
+  })
+
+  test('rest and routine overrides are named as such', () => {
+    coachWeek()
+    S.dayPlan[FAKE_TODAY_ISO] = 'rest'
+    S.dayPlan['2026-07-28'] = rid('Leg Day')   // a coach id → a pin, not an override
+    let r = call('get_week_plan')
+    expect(r.days[0]).toMatchObject({ routine_ids: [], planned_by: 'rest_override' })
+    expect(r.days[1].planned_by).toBe('pinned')
+    S.queue = null
+    S.week = { 1: rid('Push Day') }
+    S.dayPlan = { '2026-07-28': rid('Leg Day') }
+    r = call('get_week_plan')
+    expect(r.days[1]).toMatchObject({ routine_names: ['Leg Day'], planned_by: 'override' })
+  })
+})
+
 /* ---------- list_workouts ---------- */
 
 describe('list_workouts', () => {
@@ -242,6 +444,26 @@ describe('list_workouts', () => {
     const r = call('list_workouts', { limit: 3 })
     expect(r.returned_count).toBeLessThanOrEqual(3)
     expect(r.total_count).toBeGreaterThanOrEqual(r.returned_count)
+  })
+
+  test('"how many did I do in March" is answerable: matching_count and truncated', () => {
+    const wk = (id, d) => ({
+      id, d, start: Date.parse(d + 'T10:00:00'), end: Date.parse(d + 'T11:00:00'), name: 'S', routineId: S.routines[0].id,
+      entries: [{ id: '0025', target: { sets: 1, reps: 5, weight: 100 }, sets: [{ done: true, w: 100, r: 5 }] }]
+    })
+    S.workouts = []
+    for (let i = 1; i <= 40; i++) S.workouts.push(wk('mar' + i, '2026-03-' + String((i % 28) + 1).padStart(2, '0')))
+    for (let i = 1; i <= 300; i++) S.workouts.push(wk('jan' + i, '2026-01-' + String((i % 28) + 1).padStart(2, '0')))
+    _seedStateForTests(S)
+    const r = call('list_workouts', { from: '2026-03-01', to: '2026-03-31' })
+    expect(r.total_count).toBe(340)          // unchanged meaning: all-time, before the filter
+    expect(r.matching_count).toBe(40)        // in the range asked for
+    expect(r.returned_count).toBe(25)        // and how many came back
+    expect(r.truncated).toBe(true)
+    expect(r.workouts.every(w => w.date.startsWith('2026-03'))).toBe(true)
+    const whole = call('list_workouts', { from: '2026-03-01', to: '2026-03-31', limit: 200 })
+    expect(whole.returned_count).toBe(40)
+    expect(whole.truncated).toBe(false)
   })
 })
 
@@ -312,6 +534,19 @@ describe('get_workout', () => {
     expect(w.entries[1].sets[0].label).toBe('1:30')             // 90 s in mm:ss, no weight
     expect(w.entries[2].sets[0].label).toBe('1:30 · 20')        // weighted plank
     expect(w.entries[3].sets[0].label).toBe('20 min @ 8 km/h')   // cardio
+  })
+
+  test('a set taken to failure says so, in its label and as a flag', () => {
+    S.workouts = [{
+      id: 'synth-f', d: '2026-07-25', start: 0, end: 1800000, routineId: 'x', name: 'Synth',
+      bw: 78, vol: 0, prs: [],
+      entries: [{ id: 'squat', target: { mode: 'reps' }, sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 9, done: true, failure: true }] }]
+    }]
+    const [plain, failed] = call('get_workout', { date: '2026-07-25' }).entries[0].sets
+    expect(plain.label).toBe('60×5')
+    expect('failure' in plain).toBe(false)
+    expect(failed.label).toBe('60×9 F')
+    expect(failed.failure).toBe(true)
   })
 
   test('infers cardio mode from the exercise id when the target has no mode key', () => {
@@ -413,6 +648,45 @@ describe('estimate_1rm', () => {
     expect(epley.best.est).not.toBeCloseTo(brz.best.est, 1)
   })
 
+  // Both halves of this tool are one reading of one history. A unilateral set is a single row
+  // carrying both sides, so the row's own `r` is L+R and goes over the rep cap while each side's
+  // reps do not; before the PR table asked bestSetOf() the same way the per-exercise answer does,
+  // the exercise had a 1RM and no line in the table at the same time.
+  test('the PR table and the per-exercise best agree on a per-side exercise', () => {
+    const CURL = '0294'
+    const side = (w, r, rDone, lDone = true) => ({
+      w, r: r * 2, done: lDone && rDone,
+      sides: { L: { w, r, done: lDone }, R: { w, r, done: rDone } }
+    })
+    S.workouts = [{
+      id: 'w1', d: '2026-07-06', start: Date.parse('2026-07-06T10:00:00'), end: Date.parse('2026-07-06T11:00:00'), name: 'S',
+      entries: [{ id: CURL, target: { sets: 3, reps: 8, weight: 20, perSide: true }, sets: [side(20, 8, true), side(20, 8, true), side(22, 8, false)] }]
+    }]
+    _seedStateForTests(S)
+    const one = call('estimate_1rm', { exercise_id: CURL })
+    const row = call('estimate_1rm', {}).pr_table.find(p => p.exId === CURL)
+    expect(one.best).toBeTruthy()
+    expect(row).toBeTruthy()
+    expect(row.est).toBeCloseTo(one.best.est, 3)
+    expect(row.w).toBe(one.best.w)
+    expect(row.r).toBe(one.best.r)
+  })
+
+  // The app keeps an assistance machine out of the estimate, the curve and the strength list
+  // (bestSetOf, issue #232): the load is the help you were given, so Epley on it would rise as
+  // you got weaker and call that a record. The PR table scanned the rows itself and listed it.
+  test('an assistance machine is not in the PR table, the same as in the app', () => {
+    const ASSISTED_PULL_UP = '0017'
+    S.workouts = [{
+      id: 'w1', d: '2026-07-06', start: Date.parse('2026-07-06T10:00:00'), end: Date.parse('2026-07-06T11:00:00'), name: 'S',
+      entries: [{ id: ASSISTED_PULL_UP, target: { sets: 2, reps: 8, weight: 30 }, sets: [{ done: true, w: 30, r: 8 }, { done: true, w: 25, r: 8 }] }]
+    }]
+    _seedStateForTests(S)
+    expect(bestSetOf(S.workouts[0].entries[0])).toBeNull()
+    expect(call('estimate_1rm', {}).pr_table.find(p => p.exId === ASSISTED_PULL_UP)).toBeUndefined()
+    expect(call('estimate_1rm', { exercise_id: ASSISTED_PULL_UP }).best).toBeNull()
+  })
+
   test('exercises with no reps-mode history get null best + empty trend (not a 0 estimate)', () => {
     S.workouts = []
     _seedStateForTests(S)
@@ -421,6 +695,68 @@ describe('estimate_1rm', () => {
     expect(r.trend).toEqual([])
     const table = call('estimate_1rm', {}).pr_table
     expect(table).toEqual([])
+  })
+
+  test('an id that does not exist says so, and is not confused with "never trained"', () => {
+    const r = call('estimate_1rm', { exercise_id: 'not-an-exercise-at-all' })
+    expect(r.best).toBeNull()
+    expect(r.exercise.unknown).toBe(true)
+    expect(r.no_estimate_reason).toMatch(/No exercise with id "not-an-exercise-at-all" exists/)
+    expect(r.no_estimate_reason).not.toMatch(/No completed sets logged/)
+    // a real exercise with no history keeps the answer about the training, not about the id
+    S.workouts = []
+    _seedStateForTests(S)
+    const real = call('estimate_1rm', { exercise_id: LEG_PRESS_ID })
+    expect(real.exercise.unknown).toBeUndefined()
+    expect(real.no_estimate_reason).toBe('No completed sets logged for this exercise.')
+  })
+
+  test('an empty exercise_id is a validation error, not the whole PR table', async () => {
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const t = TOOLS.find(x => x.name === 'estimate_1rm')
+    const server = new McpServer({ name: 'opengym', version: '0.1.0' })
+    server.tool(t.name, t.description, t.schema, async p => ({ content: [{ type: 'text', text: JSON.stringify(t.handler(p || {})) }] }))
+    const client = new Client({ name: 'tools-test', version: '1' })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(st), client.connect(ct)])
+    const r = await client.callTool({ name: 'estimate_1rm', arguments: { exercise_id: '' } }).then(
+      x => ({ ok: !x.isError, text: x.content?.[0]?.text || '' }),
+      e => ({ code: e.code, text: String(e.message) })
+    )
+    expect(r.ok).not.toBe(true)
+    expect(String(r.code ?? r.text)).toContain('-32602')
+    expect(r.text).not.toContain('pr_table')
+  })
+
+  test('a heavy warm-up is never a PR — the table matches the app, which excludes warm-ups', () => {
+    // The app scans with bestSetOf(), which skips warm-ups (onerm.js). prTable used to gate on
+    // s.done alone, so a ramp row heavier than the work set became a record the coach reported
+    // and the athlete never saw — for the same exercise, from the same state.
+    S.workouts = [{
+      id: 'w-ramp', d: '2026-07-26', name: 'Legs', start: 1000, end: 1000 + 30 * 60000,
+      vol: 0, prs: [],
+      entries: [{
+        id: LEG_PRESS_ID, target: { sets: 2, reps: 5, mode: 'reps' },
+        sets: [
+          { w: 200, r: 5, done: true, phase: 'warmup' },  // mistyped/greedy ramp row
+          { w: 100, r: 5, done: true }                     // the only real work set
+        ]
+      }]
+    }]
+    _seedStateForTests(S)
+
+    const app = bestSetOf(S.workouts[0].entries[0])
+    expect(app.w).toBe(100)                                // the app ignores the 200 kg warm-up
+
+    const best = call('estimate_1rm', { exercise_id: LEG_PRESS_ID }).best
+    expect(best.w).toBe(100)
+    expect(best.est).toBeCloseTo(app.est, 1)
+
+    const row = call('estimate_1rm', {}).pr_table.find(p => p.exId === LEG_PRESS_ID)
+    expect(row.w).toBe(100)
+    expect(row.est).toBeCloseTo(app.est, 1)
   })
 
   test('a null estimate says which kind of null it is', () => {
@@ -488,12 +824,96 @@ describe('muscle_balance', () => {
     expect([...neg].every(s => all.has(s))).toBe(true)
   })
 
+  test('counts custom exercises — they resolve from state, not from the catalogue', () => {
+    const total = r => r.worked.reduce((n, w) => n + w.effective_sets, 0)
+    const before = call('muscle_balance', { period: 'all' })
+
+    // A custom exercise is absent from EXIDX in this process: the app merges S.customEx in
+    // via registerCustom() at store load, the MCP server does not. Its sets used to vanish
+    // from the muscle map entirely.
+    S.customEx = [{ id: 'cx-hollow-hold', n: 'Hollow hold', bp: 'waist', tg: 'abs' }]
+    S.workouts[0].entries.push({
+      id: 'cx-hollow-hold',
+      sets: [{ sec: 45, done: true }, { sec: 45, done: true }]
+    })
+
+    const after = call('muscle_balance', { period: 'all' })
+    expect(total(after)).toBeGreaterThan(total(before))
+    expect(after.worked.find(w => w.slug === 'abs')?.effective_sets)
+      .toBeGreaterThan(before.worked.find(w => w.slug === 'abs')?.effective_sets || 0)
+  })
+
+  test('still counts a DELETED custom, from the snapshot left on the entry', () => {
+    const total = r => r.worked.reduce((n, w) => n + w.effective_sets, 0)
+    const before = total(call('muscle_balance', { period: 'all' }))
+
+    // Exactly what sheets.jsx:421-426 leaves behind when a custom exercise is deleted: the
+    // customEx row is gone, the history entry keeps `n` + `muscleSnapshot`. loadOf reads that
+    // snapshot off the entry — so nothing may be attached over the top of it.
+    S.customEx = []
+    S.workouts[0].entries.push({
+      id: 'cx-deleted-hold',
+      n: 'Hollow hold',
+      muscleSnapshot: { n: 'Hollow hold', bp: 'waist', muscleWeights: { abs: 1 } },
+      sets: [{ sec: 45, done: true }, { sec: 45, done: true }]
+    })
+
+    const after = call('muscle_balance', { period: 'all' })
+    expect(total(after)).toBeGreaterThan(before)
+    expect(after.worked.find(w => w.slug === 'abs')?.effective_sets).toBeGreaterThan(0)
+  })
+
   test('period windows are inclusive: week ≤ month ≤ all', () => {
     const all = call('muscle_balance', { period: 'all' }).workouts_in_period
     const month = call('muscle_balance', { period: 'month' }).workouts_in_period
     const week = call('muscle_balance', { period: 'week' }).workouts_in_period
     expect(week).toBeLessThanOrEqual(month)
     expect(month).toBeLessThanOrEqual(all)
+  })
+
+  test('"last 7 days" is 7 calendar dates, including for workouts that carry no clock', () => {
+    // Imported or hand-added sessions have no w.start and fall back to their date at local noon.
+    // Against an instant 7x24h back, noon on the 7th day ago is still inside the window, so the
+    // week spanned 8 dates.
+    const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+    S.workouts = Array.from({ length: 40 }, (_, i) => ({
+      id: 'd' + i, d: iso(new Date(Date.now() - i * 86400000)),
+      entries: [{ id: '0025', sets: [{ done: true, w: 100, r: 5 }] }]
+    }))
+    _seedStateForTests(S)
+    expect(call('muscle_balance', { period: 'week' }).workouts_in_period).toBe(7)
+    expect(call('muscle_balance', { period: 'month' }).workouts_in_period).toBe(30)
+    // and the reported cutoff is the oldest date in the window
+    expect(call('muscle_balance', { period: 'week' }).cutoff_iso).toBe(iso(new Date(Date.now() - 6 * 86400000)))
+  })
+
+  // TZ east of Greenwich: there the UTC date of the cutoff instant is a day behind the local one,
+  // which is the bug. Node re-reads process.env.TZ, so this block owns its own zone and clock.
+  describe('the reported cutoff is a local date, like every other date in this API', () => {
+    const TZ = process.env.TZ
+    beforeAll(() => { process.env.TZ = 'Asia/Tokyo'; vi.setSystemTime(new Date('2026-07-27T08:00:00')) })
+    afterAll(() => { process.env.TZ = TZ; vi.setSystemTime(new Date(FAKE_TODAY_ISO + 'T12:00:00Z')) })
+
+    // Workouts imported without a clock (no w.start) fall back to their date at local noon, so
+    // they are the probe for which calendar dates the window really accepts.
+    const dated = (id, iso) => ({ id, d: iso, entries: [{ id: '0025', sets: [{ done: true, w: 100, r: 5 }] }] })
+    const dayBefore = iso => {
+      const [y, m, d] = iso.split('-').map(Number)
+      const p = new Date(y, m - 1, d - 1)
+      return p.getFullYear() + '-' + String(p.getMonth() + 1).padStart(2, '0') + '-' + String(p.getDate()).padStart(2, '0')
+    }
+
+    for (const period of ['week', 'month']) {
+      test(`${period}: cutoff_iso is the first date the filter accepts`, () => {
+        const iso = call('muscle_balance', { period }).cutoff_iso
+        expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        S.workouts = [dated('on-the-cutoff', iso), dated('the-day-before', dayBefore(iso))]
+        _seedStateForTests(S)
+        const r = call('muscle_balance', { period })
+        expect(r.cutoff_iso).toBe(iso)
+        expect(r.workouts_in_period).toBe(1)   // the reported day counts; the one before it does not
+      })
+    }
   })
 
   test('zero-workout state still returns all 18 muscles as neglected (not empty)', () => {
@@ -532,4 +952,358 @@ describe('shared: no-state fallback', () => {
   // Restore state after the no-state detour so a future test that forgets to seed sees the
   // failure rather than inherits null silently.
   afterAll(() => { _seedStateForTests(S = freshState()) })
+})
+
+/* ---------- preview_session ---------- */
+
+// The gap this tool exists to close: a routine stores sets/reps/weight, but those are the
+// LAST fallback the session builder consults. These tests pin the precedence — progression
+// beats the confirmed working weight, which beats the routine's own number — because getting
+// it backwards is how a coach ends up telling someone to squat a weight the app never shows.
+describe('preview_session', () => {
+  const WD = new Date(FAKE_TODAY_ISO + 'T12:00:00Z').getDay()
+
+  // One routine, one exercise, scheduled for the pinned "today". Nothing from the demo seed,
+  // so the arithmetic below is checkable by hand.
+  // Linear by default: with progression off the app opens the routine's own numbers (see the
+  // two tests at the end), so history-vs-plan precedence is only observable under a policy.
+  function only(cfg, { prog = 'linear', workouts = [], exWeights = {}, routine = {} } = {}) {
+    S.routines = [{ id: 'r-preview', name: 'Preview', emoji: 'barbell', prog, ex: [cfg], ...routine }]
+    S.week = { [WD]: 'r-preview' }
+    S.dayPlan = {}
+    S.workouts = workouts
+    S.exWeights = exWeights
+    _seedStateForTests(S)
+  }
+
+  // The session builder reads equipment and body part from the global exercise index, which holds
+  // no custom exercises here (see customOf in tools.js). A custom leg lift then ramped on the small
+  // load step, where the app, which registers its customs, takes the larger one for legs.
+  test('a custom leg lift ramps on the same load step as in the app, and the index is left as it was', () => {
+    const custom = { id: 'c-hack', n: 'Hack Squat (mine)', bp: 'upper legs', eq: 'barbell', tg: 'quads', sm: [], custom: true }
+    S.customEx = [custom]
+    only({ id: 'c-hack', sets: 3, reps: 8, weight: 90, warmupSets: 2 }, { prog: 'off' })
+    try {
+      const r = call('preview_session')
+      expect(r.exercises[0].opening_sets.filter(x => x.phase === 'warmup').map(x => x.w)).toEqual([45, 65])
+      expect(exOr('c-hack').missing).toBe(true)   // taken back out of the index
+    } finally {
+      S.customEx = []
+      _seedStateForTests(S)
+    }
+  })
+
+  test('triple progression previews its per-set aims and failure plan', () => {
+    only({ id: '0025', sets: 3, setsMax: 5, reps: 12, repsMin: 8, weight: 50, lastToFailure: true }, { prog: 'triple' })
+    const e = call('preview_session').exercises[0]
+    expect(e.prescription).toMatchObject({ kind: 'first', sets: 3, reps: 8, row_reps: [8, 8, 8] })
+    expect(e.opening_sets.map(s => s.r)).toEqual([8, 8, 8])
+    expect(e.opening_sets.map(s => !!s.failure)).toEqual([false, false, true])
+    expect(e.planned.summary).toBe('3–5 × 8–12 · 50 kg')
+  })
+
+  test('defaults to the routine scheduled for today', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 })
+    const r = call('preview_session')
+    expect(r.date).toBe(FAKE_TODAY_ISO)
+    expect(r.routine_name).toBe('Preview')
+    expect(r.exercises).toHaveLength(1)
+    expect(r.exercises[0].name).toBe('barbell bench press')
+  })
+
+  test('with no history and no confirmed weight, the routine\'s own number is what opens', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 })
+    const e = call('preview_session').exercises[0]
+    expect(e.weight_source).toBe('routine_plan')
+    expect(e.opening_sets.map(s => s.w)).toEqual([50, 50, 50])
+    expect(e.opening_sets.map(s => s.r)).toEqual([8, 8, 8])
+    expect(e.differs_from_plan).toBe(false)
+    expect(call('preview_session').overridden_count).toBe(0)
+  })
+
+  test('a confirmed working weight beats the routine\'s number', () => {
+    only({ id: '0025', sets: 2, reps: 8, weight: 50 }, { exWeights: { '0025': { w: 72.5, d: '2026-07-20' } } })
+    const e = call('preview_session').exercises[0]
+    expect(e.weight_source).toBe('confirmed_weight')
+    expect(e.opening_sets.every(s => s.w === 72.5)).toBe(true)
+    expect(e.changed).toEqual(['weight'])
+  })
+
+  test('the progression policy beats both, and its reason is reported', () => {
+    // Every rep hit at 60 last time under linear progression → +2.5, regardless of the 100
+    // the routine stores.
+    only({ id: '0025', sets: 3, reps: 5, weight: 100 }, {
+      prog: 'linear',
+      exWeights: { '0025': { w: 100, d: '2026-07-20' } },
+      workouts: [{
+        id: 'w1', d: '2026-07-20', routineId: 'r-preview', name: 'Preview',
+        entries: [{
+          id: '0025',
+          target: { id: '0025', sets: 3, reps: 5, weight: 60 },
+          sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 5, done: true }, { w: 60, r: 5, done: true }]
+        }]
+      }]
+    })
+    const out = call('preview_session')
+    const e = out.exercises[0]
+    expect(e.prescription.kind).toBe('up')
+    expect(e.weight_source).toBe('progression')
+    expect(e.opening_sets.every(s => s.w === 62.5)).toBe(true)
+    expect(e.prescription.why).toMatch(/Every rep last time/)
+    expect(e.changed).toEqual(['weight'])
+
+    expect(out.overridden_count).toBe(1)
+    expect(out.overridden[0]).toMatchObject({
+      name: 'barbell bench press', planned_weight: 100, opening_weight: 62.5
+    })
+    expect(out.overridden[0].reason).toMatch(/Every rep last time/)
+  })
+
+  const fiveLastTime = [{
+    id: 'w1', d: '2026-07-20', routineId: 'r-preview', name: 'Preview',
+    entries: [{
+      id: '0025',
+      target: { id: '0025', sets: 2, reps: 5, weight: 60 },
+      sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 5, done: true }]
+    }]
+  }]
+
+  test('reps are the routine\'s own by default, whatever was logged last time', () => {
+    only({ id: '0025', sets: 2, reps: 12, weight: 60 }, { workouts: fiveLastTime })
+    const out = call('preview_session')
+    const e = out.exercises[0]
+    expect(out.starts_from).toBe('plan')
+    expect(e.opening_sets.map(s => s.r)).toEqual([12, 12])
+    expect(e.reps_source).toBe('routine_plan')
+    expect(e.changed).not.toContain('reps')
+  })
+
+  test('reps carry from the last session when the profile starts planned sessions from it', () => {
+    only({ id: '0025', sets: 2, reps: 12, weight: 60 }, { workouts: fiveLastTime })
+    S.startFrom = 'last'
+    _seedStateForTests(S)
+    const out = call('preview_session')
+    const e = out.exercises[0]
+    expect(out.starts_from).toBe('last_session')
+    expect(e.opening_sets.map(s => s.r)).toEqual([5, 5])   // not the 12 the routine stores
+    expect(e.reps_source).toBe('last_session')
+    expect(e.changed).toContain('reps')
+  })
+
+  test('the weight comes from this routine\'s own last session, not another routine\'s (#216)', () => {
+    only({ id: '0025', sets: 2, reps: 10, weight: 60 }, {
+      workouts: [
+        { id: 'w1', d: '2026-07-20', routineIds: ['r-preview'], name: 'Preview', entries: [{ id: '0025', rid: 'r-preview', target: { sets: 2, reps: 10, weight: 60 }, sets: [{ w: 60, r: 10, done: true }, { w: 60, r: 10, done: true }] }] },
+        { id: 'w2', d: '2026-07-22', routineIds: ['r-light'], name: 'Light', entries: [{ id: '0025', rid: 'r-light', target: { sets: 2, reps: 15, weight: 40 }, sets: [{ w: 40, r: 15, done: true }, { w: 40, r: 15, done: true }] }] },
+      ]
+    })
+    const e = call('preview_session').exercises[0]
+    expect(e.opening_sets.map(s => [s.w, s.r])).toEqual([[62.5, 10], [62.5, 10]])
+    expect(e.weight_source).toBe('progression')
+  })
+
+  test('an edited routine restarts from its new reps, and says why (#275)', () => {
+    only({ id: '0025', sets: 2, reps: 10, weight: 60 }, {
+      workouts: [{
+        id: 'w1', d: '2026-07-20', routineIds: ['r-preview'], name: 'Preview',
+        entries: [{
+          id: '0025', rid: 'r-preview',
+          planned: { sets: 2, reps: 15, weight: 60 },
+          target: { sets: 2, reps: 15, weight: 60 },
+          sets: [{ w: 60, r: 15, done: true }, { w: 60, r: 15, done: true }]
+        }]
+      }]
+    })
+    const e = call('preview_session').exercises[0]
+    expect(e.prescription.kind).toBe('hold')
+    expect(e.prescription.why).toBe('Plan changed, so starting from your new target.')
+    expect(e.opening_sets.map(s => [s.w, s.r])).toEqual([[60, 10], [60, 10]])
+    expect(e.reps_source).toBe('routine_plan')
+    expect(e.differs_from_plan).toBe(false)
+  })
+
+  test('planned drop sets show up on the opening rows', () => {
+    only({ id: '0025', sets: 2, reps: 10, weight: 50, intensifier: { type: 'dropset', count: 1, pct: 20 } })
+    const e = call('preview_session').exercises[0]
+    expect(e.opening_sets.every(s => s.type === 'dropset')).toBe(true)
+  })
+
+  test('an explicit routine_id overrides the schedule', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 })
+    const other = { id: 'r-other', name: 'Other', prog: 'off', ex: [{ id: '0043', sets: 5, reps: 5, weight: 80 }] }
+    S.routines.push(other)
+    _seedStateForTests(S)
+    expect(call('preview_session', { routine_id: 'r-other' }).routine_name).toBe('Other')
+  })
+
+  test('a rest day returns no exercises rather than an error', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 })
+    S.week = {}
+    _seedStateForTests(S)
+    const r = call('preview_session')
+    expect(r.rest_day).toBe(true)
+    expect(r.exercises).toEqual([])
+  })
+
+  test('with progression off the routine\'s own numbers open, whatever history says (matches session-start.js)', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 }, {
+      prog: 'off',
+      exWeights: { '0025': { w: 72.5, d: '2026-07-20' } },
+      workouts: [{
+        id: 'w1', d: '2026-07-20', routineId: 'r-preview', name: 'Preview',
+        entries: [{ id: '0025', target: { id: '0025', sets: 3, reps: 5, weight: 60 }, sets: [{ w: 60, r: 5, done: true }] }]
+      }]
+    })
+    const out = call('preview_session')
+    const e = out.exercises[0]
+    expect(e.prescription.kind).toBe('off')
+    expect(e.opening_sets.map(s => [s.w, s.r])).toEqual([[50, 8], [50, 8], [50, 8]])
+    expect(e.weight_source).toBe('routine_plan')
+    expect(e.reps_source).toBe('routine_plan')
+    expect(e.differs_from_plan).toBe(false)
+    expect(out.overridden_count).toBe(0)
+  })
+
+  test('a deload routine (excludeFromProgression) opens its own numbers even under a policy', () => {
+    only({ id: '0025', sets: 3, reps: 5, weight: 50 }, {
+      prog: 'linear', routine: { excludeFromProgression: true },
+      workouts: [{
+        id: 'w1', d: '2026-07-20', routineId: 'r-preview', name: 'Preview',
+        entries: [{ id: '0025', target: { id: '0025', sets: 3, reps: 5, weight: 60 }, sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 5, done: true }, { w: 60, r: 5, done: true }] }]
+      }]
+    })
+    const e = call('preview_session').exercises[0]
+    expect(e.prescription.kind).toBe('off')
+    expect(e.opening_sets.every(s => s.w === 50 && s.r === 5)).toBe(true)
+    expect(e.weight_source).toBe('routine_plan')
+  })
+
+  test('a timed exercise that progressed is listed as overridden too', () => {
+    only({ id: '0025', mode: 'time', sets: 3, sec: 30, inc: 10 }, {
+      prog: 'time',
+      workouts: [{
+        id: 'w1', d: '2026-07-20', routineId: 'r-preview', name: 'Preview',
+        entries: [{ id: '0025', target: { id: '0025', mode: 'time', sets: 3, sec: 30 }, sets: [{ sec: 45, done: true }, { sec: 45, done: true }, { sec: 45, done: true }] }]
+      }]
+    })
+    const out = call('preview_session')
+    const e = out.exercises[0]
+    expect(e.prescription.kind).toBe('up')
+    expect(e.changed).toEqual(['sec'])
+    expect(e.differs_from_plan).toBe(true)
+    expect(out.overridden[0].opening_sec).toBeGreaterThan(30)
+  })
+
+  test('an unknown routine_id is an error, not an empty session', () => {
+    only({ id: '0025', sets: 3, reps: 8, weight: 50 })
+    expect(() => call('preview_session', { routine_id: 'nope' })).toThrow(/no routine with id/)
+  })
+})
+
+/* ---------- a workout's photos and videos ---------- */
+
+// workouts[].media — progress photos and form-check clips — are the owner's own files. The MCP
+// bridge answers from the same state file, so it must not pass on a single hash, poster or even
+// the key: an LLM client has nothing to do with them.
+describe('workout photos and videos never leave through MCP', () => {
+  const HASH = 'a1'.repeat(32), POSTER = 'b2'.repeat(32)
+  test('no tool answer carries them', () => {
+    for (const w of S.workouts) {
+      w.media = [{ kind: 'video', hash: HASH, mime: 'video/mp4', size: 900000, width: 720, height: 1280, dur: 9, codec: 'avc1', poster: { hash: POSTER, mime: 'image/webp', size: 9000, width: 270, height: 480 }, at: 1 }]
+    }
+    _seedStateForTests(S)
+    const newest = call('list_workouts', {}).workouts[0]
+    const answers = [
+      call('list_workouts', {}),
+      call('get_workout', newest.id ? { workout_id: newest.id } : { date: newest.date }),
+      call('muscle_balance', { period: 'all' }),
+      call('muscle_balance', { period: 'month' }),
+    ]
+    for (const a of answers) {
+      const json = JSON.stringify(a)
+      for (const leak of [HASH, POSTER, '"media"', '"poster"', 'video/mp4']) expect(json).not.toContain(leak)
+    }
+  })
+})
+
+/* ---------- the documented `to` default ---------- */
+
+describe('`to` defaults to today, as documented', () => {
+  test('a workout and a weigh-in dated in the future are not "the most recent"', () => {
+    // Another device with a wrong clock writes a 2099 row. Both tools document `to` as
+    // "Defaults to today" and had no default at all, so that row was listed first and read as
+    // the latest weight.
+    S.workouts.push({ id: 'w-future', d: '2099-01-01', name: 'Time Machine', routineId: S.routines[0].id, start: 1, end: 2, entries: [] })
+    S.bodyweight.push({ d: '2099-01-01', w: 1 })
+    _seedStateForTests(S)
+    const lw = call('list_workouts')
+    expect(lw.workouts.map(w => w.date)).not.toContain('2099-01-01')
+    expect(lw.workouts[0].date).toBe(NEWEST_WORKOUT.date)
+    const bw = call('get_bodyweight')
+    expect(bw.entries.map(e => e.date)).not.toContain('2099-01-01')
+    expect(bw.latest.date).toBe(LATEST_BW.date)
+    expect(bw.latest.weight).toBe(LATEST_BW.weight)
+    // …and asking for them explicitly still works
+    expect(call('list_workouts', { to: '2099-12-31' }).workouts[0].date).toBe('2099-01-01')
+    expect(call('get_bodyweight', { to: '2099-12-31' }).latest.date).toBe('2099-01-01')
+  })
+})
+
+/* ---------- argument validation at the real SDK boundary ---------- */
+
+// Driven through McpServer + an in-memory transport with the registration loop from src/index.js,
+// because the thing under test is what zod does to the arguments BEFORE a handler ever runs.
+describe('date arguments must be dates the calendar has', () => {
+  let client
+
+  beforeAll(async () => {
+    const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const server = new McpServer({ name: 'opengym', version: '0.1.0' })
+    for (const t of TOOLS) {
+      server.tool(t.name, t.description, t.schema, async (params) => {
+        try {
+          return { content: [{ type: 'text', text: JSON.stringify(t.handler(params || {}), null, 2) }] }
+        } catch (err) {
+          return { isError: true, content: [{ type: 'text', text: `${err.code || 'ERROR'}: ${err.message}` }] }
+        }
+      })
+    }
+    client = new Client({ name: 'tools-test', version: '1' })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(st), client.connect(ct)])
+  })
+
+  const shot = (name, args) => client.callTool({ name, arguments: args }).then(
+    r => ({ ok: !r.isError, text: r.content?.[0]?.text || '' }),
+    e => ({ rejected: true, code: e.code, message: String(e.message) })
+  )
+
+  test('February 30th is refused, not answered for March 2nd', async () => {
+    for (const [tool, args] of [
+      ['preview_session', { date: '2026-02-30' }],
+      ['get_workout', { date: '2026-02-30' }],
+      ['list_workouts', { from: '2026-13-45' }],
+      ['list_workouts', { to: '0000-00-00' }],
+      ['get_bodyweight', { to: '2026-02-30' }],
+      ['get_bodyweight', { from: '2025-02-29' }]      // 2024 had one, 2025 did not
+    ]) {
+      const r = await shot(tool, args)
+      const where = `${tool} ${JSON.stringify(args)}`
+      // The SDK answers an invalid-params rejection either as a throw or as an error result
+      // carrying the same code; both are the -32602 the client sees, neither runs the handler.
+      expect(r.ok, `${where} must be refused`).not.toBe(true)
+      expect(String(r.code ?? r.text), where).toContain('-32602')
+      expect(String(r.message ?? r.text), where).toMatch(/not a date the calendar has|must be YYYY-MM-DD/)
+    }
+  })
+
+  test('real dates, including a leap day, still get through', async () => {
+    for (const args of [{ from: '2026-02-28', to: '2026-07-27' }, { from: '2024-02-29' }]) {
+      const r = await shot('list_workouts', args)
+      expect(r.rejected).toBeUndefined()
+      expect(r.ok).toBe(true)
+    }
+  })
 })

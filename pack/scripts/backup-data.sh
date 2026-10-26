@@ -2,6 +2,7 @@
 # Backup the instance data folder and prune old local archives.
 # Usage: ./pack/scripts/backup-data.sh [backup-dir] [retention-days]
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="${1:-$ROOT/backups}"

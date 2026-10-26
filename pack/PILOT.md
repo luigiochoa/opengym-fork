@@ -1,0 +1,51 @@
+# Piloto: un entrenador y sus alumnos
+
+Base integrada: **openGym v1.4.2**. `gym-local` no participa en esta POC.
+La pantalla **Mis alumnos** es para el entrenador humano; el Coach de IA del original es otra función y no hace falta configurarlo.
+
+## Preparar una instancia
+
+1. Trabajar sobre esta rama en una copia dedicada. Conservar el dominio y el directorio `data/` de la instancia existente: las passkeys dependen de `RP_ID` y `ORIGIN`.
+2. Respaldar **con la API detenida**: `docker compose stop api`, `bash pack/scripts/backup-data.sh`, `docker compose start api`. Guardar el archivo fuera del servidor.
+3. En `.env`, preservar la configuración existente y activar `TRAINER_PILOT=1`, `INVITE_ONLY=1`, `ALLOW_GUEST=0`, `DEFAULT_LANG=es`. Opcional: `PASSWORD_LOGIN=1` permite acceso con contraseña además de passkeys. La plantilla `pack/runtime/pilot.env.example` es para una instalación nueva, no para sobrescribir la existente.
+4. Configurar `ADMIN_UIDS` con el ID de la cuenta del entrenador existente. El propietario de la instancia es el único que accede a **Mis alumnos**. No dar rol admin a alumnos.
+5. En una instalación vacía: abrir solo en localhost o red privada, arrancar con `FIRST_USER_ADMIN=1` e `INVITE_ONLY=0`, registrar la cuenta del entrenador, anotar su ID desde Administración y volver a arrancar con `FIRST_USER_ADMIN=0`, `INVITE_ONLY=1` y `ADMIN_UIDS=<id>`. No exponer el registro abierto durante este proceso.
+6. Aplicar marca: `bash pack/scripts/apply-brand.sh fortachones-gym`. Este paso conserva las variables de infraestructura.
+7. Construir desde este código: `docker compose up -d --build`. No usar solamente `docker compose pull`: las imágenes oficiales no contienen las funciones de este fork.
+8. Comprobar `/api/health`, acceso del entrenador, invitaciones, pantalla de alumnos y fuente AGPL en Ajustes.
+
+La actualización incluye medios de ejercicios con licencia separada. Conservar los avisos y verificar los derechos del catálogo y del GIF temporal de hip thrust antes de ofrecer una distribución comercial; ver `NOTICE.md`.
+
+## Recorrido del entrenador
+
+- Inicio → **Mis alumnos** → **Invitaciones y accesos** para crear una invitación por alumno.
+- Crear rutinas desde Plan y esperar a que se sincronicen.
+- En **Mis alumnos**, elegir una rutina y opcionalmente sus días; pulsar **Enviar rutina** en el alumno deseado.
+- El alumno verá el plan al entrar en Inicio o volver a la app y deberá incorporarlo.
+- Los días elegidos se actualizan; los demás días, las rutinas previas y el historial se conservan. Las asignaciones de varias rutinas se envían e incorporan una a una. Hay una asignación actual por alumno: enviar otra sustituye la tarjeta pendiente, no elimina lo ya incorporado.
+- El estado **Recibida** se confirma únicamente después de que el plan esté sincronizado en el servidor. Una desconexión permite reintentar sin duplicar la rutina.
+- El alumno registra su sesión en el tracker habitual y puede enviar un comentario desde Inicio.
+- El entrenador ve última sesión, número de entrenamientos, estado del plan y comentario; **Ver historial** muestra las series registradas.
+
+## Validación manual antes de invitar alumnos reales
+
+Usar dos perfiles de prueba distintos y dos sesiones de navegador:
+
+- [ ] El entrenador invita a ambos alumnos; un alumno no puede abrir `/trainer` ni Administración.
+- [ ] Asignar Piernas al alumno A los lunes; B no recibe esa asignación.
+- [ ] A incorpora el plan: se conserva su historial y el resto de su semana.
+- [ ] A recarga y reintenta: la rutina no se duplica.
+- [ ] A registra una sesión y un comentario; el entrenador ve ambos.
+- [ ] Desconectar después de descargar la app, registrar series, reconectar y revisar la sincronización.
+- [ ] Probar el acceso elegido en el teléfono real del piloto.
+- [ ] Imprimir un plan: nombre/logo/color de Fortachones y atribución a openGym.
+- [ ] Exportar un perfil y restaurar el respaldo en una instancia separada.
+
+## Recuperación
+
+No iniciar la versión antigua contra un `data/` ya modificado por la versión nueva. Guardar el commit anterior (`bf313d40711bea03f24b6430780a86d5401e0cf9`) y el archivo de respaldo juntos.
+Si se necesita volver: detener toda la instancia, mover el `data/` actual a una carpeta de resguardo, extraer el respaldo verificado que contiene `data/`, volver al commit anterior, aplicar marca y reconstruir. Probar primero en otra carpeta y puerto. Una vuelta atrás pierde los cambios posteriores al respaldo: conservar también la copia nueva para recuperarlos.
+
+## Límites de esta POC
+
+Una instancia, un entrenador propietario y sus alumnos. El propietario puede revisar sus historiales; no se han añadido varios entrenadores, cobros ni membresías. El feedback es una nota actual por alumno, no un chat. Las asignaciones y comentarios necesitan conexión; el tracker conserva la sincronización local del original. Las animaciones de ejercicios no se precargan todas para uso sin red. La aceptación conserva rutinas previas y sobrescribe solo los días seleccionados; no elimina automáticamente versiones anteriores de una rutina.

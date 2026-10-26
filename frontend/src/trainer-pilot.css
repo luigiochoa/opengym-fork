@@ -1,0 +1,9 @@
+.trainer-pilot{padding-bottom:110px}
+.pilot-card{display:grid;gap:12px}
+.pilot-card .pilot-title{color:var(--label);font-weight:600}
+.pilot-card p{line-height:1.45}
+.pilot-card label{line-height:1.4}
+.pilot-card select{min-height:48px;cursor:pointer;color-scheme:dark}
+:root[data-theme="light"] .pilot-card select{color-scheme:light}
+.pilot-card input[type="checkbox"]{accent-color:var(--acc);width:18px;height:18px}
+.pilot-card blockquote{margin:0;padding:10px 14px;border-inline-start:3px solid var(--acc);background:var(--surface-2);border-radius:6px}

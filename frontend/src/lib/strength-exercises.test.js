@@ -130,6 +130,47 @@ describe('strengthExerciseRows', () => {
     expect(benchRow.decay).toBeCloseTo(benchDecay, 4)
     expect(benchRow.current).toBeCloseTo(Math.round(102 * benchDecay * 10) / 10, 2)
   })
+
+  it('uses a later completed duplicate for strength and its saved metadata', () => {
+    const preparation = {
+      id: 'deleted-duplicate',
+      muscleSnapshot: { n: 'Preparation copy', muscleWeights: { chest: 1 } },
+      sets: [{ phase: 'warmup', w: 200, r: 5, done: true }],
+    }
+    const work = {
+      id: 'deleted-duplicate',
+      muscleSnapshot: { n: 'Working copy', muscleWeights: { back: 1 } },
+      sets: [{ phase: 'work', w: 100, r: 5, done: true }],
+    }
+    const S = unitState([workout(3, [preparation, work])])
+    const before = structuredClone(S)
+    const row = strengthExerciseRows(S, NOW)[0]
+    expect(row).toMatchObject({ id: 'deleted-duplicate', name: 'Working copy', primary: 'back', est: 116.7, current: 116.7 })
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'back')[0]).toMatchObject({ id: 'deleted-duplicate', weight: 1 })
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'chest')).toEqual([])
+    expect(S).toEqual(before)
+  })
+
+  it('chooses deleted-exercise metadata from the newest workout date', () => {
+    const newest = {
+      id: 'deleted-by-date',
+      muscleSnapshot: { n: 'Newest copy', muscleWeights: { back: 1 } },
+      sets: [{ phase: 'work', w: 100, r: 5, done: true }],
+    }
+    const older = {
+      id: 'deleted-by-date',
+      muscleSnapshot: { n: 'Older copy', muscleWeights: { chest: 1 } },
+      sets: [{ phase: 'work', w: 90, r: 5, done: true }],
+    }
+    const S = unitState([
+      workout(3, [newest]),
+      workout(30, [older]),
+    ])
+    const row = strengthExerciseRows(S, NOW)[0]
+    expect(row).toMatchObject({ id: 'deleted-by-date', name: 'Newest copy', primary: 'back' })
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'back')[0]).toMatchObject({ name: 'Newest copy', weight: 1 })
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'chest')).toEqual([])
+  })
 })
 
 describe('strengthExerciseRowsForMuscle', () => {
@@ -163,6 +204,18 @@ describe('strengthExerciseRowsForMuscle', () => {
     const S = unitState([workout(3, [bench])])
     expect(strengthExerciseRowsForMuscle(S, NOW, 'biceps')).toEqual([])
   })
+
+  it('does not expose zero-weight historical mappings as strength rows', () => {
+    const zeroMapped = {
+      id: 'deleted-zero-mapped',
+      muscleSnapshot: { n: 'Zero mapped', muscleWeights: { chest: 1, biceps: 0 } },
+      sets: [{ phase: 'work', w: 80, r: 8, done: true, unit: 'kg' }],
+    }
+    const S = unitState([workout(3, [zeroMapped])])
+
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'chest')).toHaveLength(1)
+    expect(strengthExerciseRowsForMuscle(S, NOW, 'biceps')).toEqual([])
+  })
 })
 
 describe('primaryMuscleOf', () => {
@@ -172,5 +225,10 @@ describe('primaryMuscleOf', () => {
     expect(primaryMuscleOf({ tg: 'back', mg: 'biceps' }).slug).toBe('upper-back') // canonicalised
     expect(primaryMuscleOf({})).toBeNull()
     expect(primaryMuscleOf(null)).toBeNull()
+  })
+
+  it('never selects an explicit zero as the primary muscle', () => {
+    expect(primaryMuscleOf({ muscleWeights: { chest: 0, biceps: 0 } })).toBeNull()
+    expect(primaryMuscleOf({ muscleWeights: { chest: 1, biceps: 0 } })).toEqual({ slug: 'chest', weight: 1 })
   })
 })
