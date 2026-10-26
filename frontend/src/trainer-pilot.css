@@ -39,3 +39,7 @@
 .trainer-live-entry+.trainer-live-entry{border-top:var(--hair) solid var(--sep)}
 .tag.trainer-live-badge{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
 .tag.trainer-live-badge.stale{background:var(--surface-3);color:var(--label-2)}
+
+.trainer-history-comment{margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.trainer-history-comment p{margin-top:4px}
+#trainer-help,#trainer-pupils{scroll-margin-top:20px}

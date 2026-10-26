@@ -17,7 +17,7 @@ if [[ ! -d "$ROOT/data" ]]; then
 fi
 
 mkdir -p "$DEST"
-tar -C "$ROOT" -czf "$ARCHIVE" data
+COPYFILE_DISABLE=1 tar -C "$ROOT" -czf "$ARCHIVE" data
 chmod 600 "$ARCHIVE"
 
 # Archives are local safety copies. Production should also sync DEST off-VPS.

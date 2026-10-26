@@ -1,5 +1,5 @@
 import { LiveActivityPublisher } from './components/TrainerLive.jsx'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, lazy, Suspense } from 'react'
 import { hideBoot } from './lib/boot.js'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { useStore } from './store/useStore.js'
@@ -45,20 +45,20 @@ import CheckIn from './views/CheckIn.jsx'
 import Plan from './views/Plan.jsx'
 import RoutineEdit from './views/RoutineEdit.jsx'
 import Workout from './views/Workout.jsx'
-import Stats from './views/Stats.jsx'
+const Stats = lazy(() => import('./views/Stats.jsx'))
 import History from './views/History.jsx'
 import Library from './views/Library.jsx'
 import Muscles from './views/Muscles.jsx'
-import StructuralBalance from './views/StructuralBalance.jsx'
-import ProgressPhotos from './views/ProgressPhotos.jsx'
+const StructuralBalance = lazy(() => import('./views/StructuralBalance.jsx'))
+const ProgressPhotos = lazy(() => import('./views/ProgressPhotos.jsx'))
 import { SettingsRoute } from './views/Settings.jsx'
-import Admin from './views/Admin.jsx'
-import Trainer from './views/Trainer.jsx'
+const Admin = lazy(() => import('./views/Admin.jsx'))
+const Trainer = lazy(() => import('./views/Trainer.jsx'))
 import StudentPayments from './components/StudentPayments.jsx'
-import CoachChat from './views/CoachChat.jsx'
-import Measurements from './views/Measurements.jsx'
-import CoachIntake from './views/CoachIntake.jsx'
-import CoachSetup from './views/CoachSetup.jsx'
+const CoachChat = lazy(() => import('./views/CoachChat.jsx'))
+const Measurements = lazy(() => import('./views/Measurements.jsx'))
+const CoachIntake = lazy(() => import('./views/CoachIntake.jsx'))
+const CoachSetup = lazy(() => import('./views/CoachSetup.jsx'))
 
 // last known scrollY per route, so back-navigation can put the page where it was
 const scrollPositions = new Map()
@@ -325,7 +325,7 @@ function Page({ loc, render, under = false, scrollY = 0 }) {
     data-path={loc.pathname} data-promoted={promoted ? '' : undefined}
     aria-hidden={under || undefined} inert={under || undefined}>
     <div className="page-in" style={under && scrollY ? { transform: `translateY(${-scrollY}px)` } : undefined}>
-      <ErrorBoundary>{render(loc)}</ErrorBoundary>
+      <ErrorBoundary><Suspense fallback={<p role="status" className="muted trainer-note">Abriendo pantalla…</p>}>{render(loc)}</Suspense></ErrorBoundary>
     </div>
   </div>
 }

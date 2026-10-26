@@ -7,7 +7,7 @@ import { api } from '../lib/api.js'
 import { pushSupported, enablePush } from '../lib/push.js'
 import { Section, Row, Button, SelectRow, TextArea } from './ui.jsx'
 
-const labels = { pending: 'Solicitud enviada · Esperando al entrenador', attending: 'Tu entrenador ya vio tu solicitud y va a ayudarte', resolved: 'Tu entrenador marcó la solicitud como atendida' }
+const labels = { pending: 'Solicitud enviada · Esperando al entrenador', attending: 'Tu entrenador ya vio tu solicitud y va a ayudarte', resolved: 'Tu entrenador marcó la solicitud como atendida', cancelled: 'Cancelaste esta solicitud' }
 function useAssistance(owner) {
   const user = useStore(s => s.user)
   const enabled = useStore(s => s.config?.trainer_pilot)
@@ -54,8 +54,11 @@ function RequestSheet({ close }) {
     try {
       if (useStore.getState().user?.id !== userId) throw Object.assign(new Error('Tu sesión cambió. Cierra este formulario y vuelve a abrirlo.'), { code: 'session-changed' })
       const data = await api('/api/me/assistance', { method: 'POST', body: JSON.stringify({ kind, note, requestId }) })
-      changed({ userId, request: data.request }); close(); useUI.getState().toast(data.request.status === 'resolved' ? 'Esta solicitud ya fue atendida' : 'Solicitud enviada a tu entrenador')
-    } catch (e) { setError(e.status || e.code === 'session-changed' ? e.message : 'No se pudo conectar con el servidor. Tu mensaje sigue aquí; revisa tu conexión y vuelve a intentar.') }
+      changed({ userId, request: data.request }); close(); useUI.getState().toast(data.request.status === 'resolved' ? 'Esta solicitud ya fue atendida' : data.request.status === 'cancelled' ? 'Esta solicitud ya fue cancelada' : 'Solicitud enviada a tu entrenador')
+    } catch (e) {
+      if (e.status === 409 && e.data?.request) { changed({ userId, request: e.data.request }); close(); useUI.getState().toast(e.message) }
+      else setError(e.status || e.code === 'session-changed' ? e.message : 'No se pudo conectar con el servidor. Tu mensaje sigue aquí; revisa tu conexión y vuelve a intentar.')
+    }
     finally { setBusy(false) }
   }
   return <><h3>Pedir ayuda</h3>
@@ -69,15 +72,27 @@ function RequestSheet({ close }) {
 }
 export function StudentAssistance() {
   const { allowed, data, error } = useAssistance(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
   if (!allowed) return null
-  const pending = data?.request && data.request.status !== 'resolved'
-  return <Section footer={error || undefined}><Row icon="bell" iconTint="var(--orange)" title={pending ? 'Ayuda solicitada' : 'Pedir ayuda a mi entrenador'} subtitle={data?.request ? labels[data.request.status] : 'Asistencia con un ejercicio o una duda'} accessory={pending ? undefined : 'chevron'} onClick={pending ? undefined : () => useUI.getState().openSheet(close => <RequestSheet close={close} />)} /></Section>
+  const pending = data?.request && ['pending', 'attending'].includes(data.request.status)
+  const cancel = async () => {
+    const userId = useStore.getState().user?.id
+    setCancelling(true); setCancelError('')
+    try {
+      const response = await api('/api/me/assistance/cancel', { method: 'POST', body: JSON.stringify({ id: data.request.id }) })
+      changed({ userId, request: response.request })
+    } catch (e) { setCancelError(e.status === 409 ? 'Tu entrenador ya está atendiendo la solicitud.' : 'No se pudo cancelar. Revisa tu conexión.') }
+    finally { setCancelling(false) }
+  }
+  return <Section footer={cancelError || error || undefined}><Row icon="bell" iconTint="var(--orange)" title={pending ? 'Ayuda solicitada' : 'Pedir ayuda a mi entrenador'} subtitle={data?.request ? labels[data.request.status] : 'Asistencia con un ejercicio o una duda'} accessory={pending ? undefined : 'chevron'} onClick={pending ? undefined : () => useUI.getState().openSheet(close => <RequestSheet close={close} />)} />{data?.request?.status === 'pending' && <div className="trainer-form-action"><Button size="sm" variant="plain" disabled={cancelling} onClick={cancel}>{cancelling ? 'Cancelando…' : 'Cancelar solicitud'}</Button></div>}</Section>
 }
-export function TrainerAssistance() {
+export function TrainerAssistance({ onCount }) {
   const { allowed, data, error } = useAssistance(true)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
   const [pushMessage, setPushMessage] = useState('')
+  useEffect(() => { if (data?.requests) onCount?.(data.requests.length) }, [data?.requests?.length, onCount])
   if (!allowed) return null
   const update = async (id, status) => {
     setBusy(true); setActionError('')

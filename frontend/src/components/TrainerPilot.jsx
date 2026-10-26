@@ -1,3 +1,4 @@
+import { StudentAssignmentHistory } from './AssignmentHistory.jsx'
 import '../trainer-pilot.css'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -40,14 +41,15 @@ export function TrainerHome() {
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (!enabled || !user || user.admin) return
-    let active = true
-    const load = () => api('/api/trainer/assignment').then(r => {
-      if (active) { setAssignment(r.assignment); setError('') }
-    }).catch(() => { if (active) setError('No se pudo consultar tu rutina. Revisa tu conexión.') })
+    let active = true, sequence = 0, applied = 0
+    const load = () => { const current = ++sequence; return api('/api/trainer/assignment').then(r => {
+      if (active && current > applied) { applied = current; setAssignment(r.assignment); setError('') }
+    }).catch(() => { if (active && current > applied) { applied = current; setError('No se pudo consultar tu rutina. Revisa tu conexión.') } }) }
     load()
     const refresh = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', refresh)
-    return () => { active = false; document.removeEventListener('visibilitychange', refresh) }
+    document.addEventListener('visibilitychange', refresh); window.addEventListener('online', refresh)
+    const timer = setInterval(refresh, 30000)
+    return () => { active = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('online', refresh) }
   }, [enabled, user?.id])
   if (!enabled || !user) return null
   if (user.owner) return <Section><Row icon="personCircle" iconTint="var(--indigo)" title="Mis alumnos" subtitle="Rutinas y seguimiento" accessory="chevron" onClick={() => nav('/trainer')} /></Section>
@@ -73,6 +75,7 @@ export function TrainerHome() {
     </Row>
     {!assignment.accepted ? <div className="trainer-form-action"><Button variant="tinted" disabled={busy} onClick={accept}>{busy ? 'Guardando…' : imported ? 'Confirmar sincronización' : 'Incorporar rutina'}</Button></div> :
       <Row icon="note" iconTint="var(--orange)" title={assignment.feedback ? 'Tu comentario' : 'Comentar al entrenador'} subtitle={assignment.feedback || 'Cuéntale cómo va tu entrenamiento'} accessory="chevron" onClick={feedback} />}
+    <StudentAssignmentHistory />
     {error && <p role="alert" className="trainer-error">{error}</p>}
   </Section>
 }

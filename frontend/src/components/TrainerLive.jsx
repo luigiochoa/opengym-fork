@@ -5,10 +5,9 @@ import { useUI } from '../store/useUI.js'
 import { api, beacon } from '../lib/api.js'
 import { liveSnapshot, liveDescription } from '../lib/trainer-live.js'
 import { dateLocale } from '../lib/i18n-core.js'
+import { useSharingPreference, confirmLivePreference, reportLiveStatus } from '../store/useLivePreferences.js'
 import { Section, Row, Switch } from './ui.jsx'
 
-const preferenceEvent = 'trainer-live-preference'
-const statusEvent = 'trainer-live-status'
 // The publisher is mounted once in App; route pages only render the privacy control.
 export function LiveActivityPublisher() { return <SharingController publisher /> }
 export function StudentLiveSharing() { return <SharingController /> }
@@ -17,20 +16,10 @@ function SharingController({ publisher = false }) {
   const pilot = useStore(s => s.config?.trainer_pilot)
   const allowed = !!(pilot && user?.id && !user.admin)
   const session = useStore(s => { const active = s.S.active; return active && !active.backfill && !active.editingWorkoutId ? active.start || 'active' : null })
-  const [prefs, setPrefs] = useState(null)
+  const prefs = useSharingPreference(allowed ? user.id : null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const enabled = prefs?.id === user?.id && prefs?.enabled === true
-  useEffect(() => {
-    if (!allowed) return
-    let alive = true, revision = 0
-    const current = ++revision
-    const load = () => api('/api/me/live-sharing').then(data => { if (alive && current === revision) { setPrefs({ id: user.id, enabled: data.enabled }); setError('') } }).catch(() => { if (alive && current === revision) setError('No pudimos consultar esta preferencia. Revisa tu conexión.') })
-    const changed = event => { if (event.detail?.id === user.id) { ++revision; setPrefs(event.detail) } }
-    const status = event => { if (event.detail?.id === user.id) setError(event.detail.error || '') }
-    load(); window.addEventListener(preferenceEvent, changed); window.addEventListener(statusEvent, status)
-    return () => { alive = false; window.removeEventListener(preferenceEvent, changed); window.removeEventListener(statusEvent, status) }
-  }, [allowed, user?.id])
+  const enabled = prefs.enabled === true
   useEffect(() => {
     if (!allowed || !enabled || !publisher || session === null) return
     const userId = user.id, sessionId = crypto.randomUUID()
@@ -40,11 +29,11 @@ function SharingController({ publisher = false }) {
       const snapshot = pending.active ? liveSnapshot(useStore.getState().S.active, useUI.getState().timer) : pending; pending = null; sending = true
       try {
         await api('/api/me/live-activity', { method: 'POST', body: JSON.stringify({ ...snapshot, restSeconds: snapshot.phase === 'rest' ? Math.max(1, Math.ceil((snapshot.restEndsAt - Date.now()) / 1000)) : null, sessionId, sequence: ++sequence }) })
-        if (!stopped) window.dispatchEvent(new CustomEvent(statusEvent, { detail: { id: userId, error: '' } }))
+        if (!stopped) reportLiveStatus(userId, '')
       } catch (e) {
         if (!stopped) {
-          window.dispatchEvent(new CustomEvent(statusEvent, { detail: { id: userId, error: 'No se pudo actualizar tu actividad. Se reintentará con conexión.' } }))
-          if (e.status === 403) { window.dispatchEvent(new CustomEvent(preferenceEvent, { detail: { id: userId, enabled: false } })); pending = null }
+          reportLiveStatus(userId, 'No se pudo actualizar tu actividad. Se reintentará con conexión.')
+          if (e.status === 403) { confirmLivePreference(userId, false); pending = null }
         }
       } finally { sending = false; if (pending) void drain() }
     }
@@ -84,13 +73,12 @@ function SharingController({ publisher = false }) {
     try {
       const data = await api('/api/me/live-sharing', { method: 'POST', body: JSON.stringify({ enabled: !enabled }) })
       if (useStore.getState().user?.id !== id) return
-      const value = { id, enabled: data.enabled }; setPrefs(value)
-      window.dispatchEvent(new CustomEvent(preferenceEvent, { detail: value }))
+      confirmLivePreference(id, data.enabled)
     } catch { setError('No se pudo guardar. Revisa tu conexión y vuelve a intentar.') }
     finally { setBusy(false) }
   }
-  return <Section footer={error || (enabled ? 'Solo tu entrenador ve el ejercicio seleccionado, las series y el descanso mientras tu sesión siga activa, incluso al cambiar de pantalla. Al terminar o descartar dejas de compartir. Si el teléfono suspende la app, se mostrará la última señal.' : 'Comparte tu actividad con tu entrenador para que pueda acompañarte durante la sesión.')}>
-    <Row icon="personCircle" iconTint="var(--indigo)" title="Compartir sesión con mi entrenador" subtitle={enabled ? 'Activado' : 'Desactivado'}><Switch aria-label="Compartir sesión con mi entrenador" checked={enabled} disabled={busy || prefs?.id !== user.id} onChange={toggle} /></Row>
+  return <Section footer={error || prefs.error || prefs.activityError || (enabled ? 'Solo tu entrenador ve el ejercicio seleccionado, las series y el descanso mientras tu sesión siga activa, incluso al cambiar de pantalla. Al terminar o descartar dejas de compartir. Si el teléfono suspende la app, se mostrará la última señal.' : 'Comparte tu actividad con tu entrenador para que pueda acompañarte durante la sesión.')}>
+    <Row icon="personCircle" iconTint="var(--indigo)" title="Compartir sesión con mi entrenador" subtitle={prefs.enabled === null ? 'Consultando preferencia…' : enabled ? session === null ? 'Activado · Se compartirá al iniciar' : 'Compartiendo sesión activa' : 'Desactivado'}><Switch aria-label="Compartir sesión con mi entrenador" checked={enabled} disabled={busy || prefs.enabled === null} onChange={toggle} /></Row>
   </Section>
 }
 

@@ -1,3 +1,4 @@
+import { downloadPaymentsCsv } from '../lib/payment-csv.js'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { useUI } from '../store/useUI.js'
@@ -100,6 +101,7 @@ export function TrainerPayments({ pupil, onChanged }) {
       {error && <p role="alert" className="trainer-error trainer-payment-error">{error}</p>}
     </Section>
     {billing.payments.length > 0 && <Section title={`Historial de pagos · ${billing.payments.length}`} footer="Toca un registro para corregirlo mediante una anulación.">
+      <Row icon="clipboard" title="Exportar historial de pagos" subtitle="CSV privado para tu control" accessory="chevron" onClick={() => downloadPaymentsCsv(billing.payments, pupil.id)} />
       {billing.payments.map(payment => <div className="trainer-payment-entry" key={payment.id}>
         <Row icon={payment.voidedAt ? 'xmark' : 'checkCircle'} iconTint={payment.voidedAt ? 'var(--surface-3)' : 'var(--acc)'} title={`${paymentMoney(payment) || 'Pago registrado'} · ${fmtDate(payment.paidOn, false, true)}`}
           subtitle={`Del ${fmtDate(payment.validFrom)} al ${fmtDate(payment.nextDueOn)}`} accessory={payment.voidedAt ? 'none' : 'chevron'} onClick={payment.voidedAt ? undefined : () => options(payment)}>

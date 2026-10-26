@@ -5,3 +5,12 @@ data
 .env
 .git
 *.log
+
+work
+backups
+coach-auth
+outputs
+**/.env
+**/.env.*
+**/__pycache__
+**/*.pyc

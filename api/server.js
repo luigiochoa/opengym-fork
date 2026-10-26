@@ -12,6 +12,7 @@ import {
   generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse
 } from '@simplewebauthn/server';
+import { createPupilSummaryReader } from './trainer-summary.js';
 import { trainerRoutes } from './trainer.js';
 import { createPaymentReminderRunner } from './trainer-payment-reminders.js';
 import webpush from 'web-push';
@@ -933,6 +934,8 @@ function livePresence(uid) {
 }
 setInterval(() => { const now = Date.now(); for (const [k, v] of presence) if (!presenceListed(v, now)) presence.delete(k); }, 30000).unref();
 
+const readPupilSummary = createPupilSummaryReader({ stat: uid => fs.statSync(stateFile(uid)), readState: readStateStrict, unreadable: UNREADABLE });
+
 /* ---------- audit log ---------- */
 // Who signed in, who tried and failed, and what an admin changed. One JSON object per line in
 // ./data/audit.log, appended and never rewritten in place. It deliberately does not live in
@@ -1378,6 +1381,9 @@ function removeAccount(u) {
   if (db.trainerPayments) db.trainerPayments = db.trainerPayments.filter(p => p.userId !== u.id);
   if (db.trainerAssignments) delete db.trainerAssignments[u.id];
   if (db.trainerPaymentReminders) delete db.trainerPaymentReminders[u.id];
+  readPupilSummary.invalidate(u.id);
+  if (db.trainerAssignmentHistory) delete db.trainerAssignmentHistory[u.id];
+  if (db.trainerAssistanceReceipts) delete db.trainerAssistanceReceipts[u.id];
   if (db.trainerLiveSharing) delete db.trainerLiveSharing[u.id];
   if (db.trainerAssistance) delete db.trainerAssistance[u.id];
   if (db.trainerPaymentNotices) delete db.trainerPaymentNotices[u.id];
@@ -2528,6 +2534,7 @@ const routes = {
     // the old revision until some later write happened to land on a different tick. This is the
     // only writer of a state file in the tree, so evicting here is the whole fix.
     stateCache.delete(user.id);
+    readPupilSummary.invalidate(user.id);
     // Starts (or stops) the grace clock of every stored file this write stopped (or started)
     // referencing. Bookkeeping only: the state is already saved, so nothing here may turn a
     // successful write into an error.
@@ -2666,7 +2673,7 @@ const routes = {
     json(res, 200, { ok: true });
   },
 
-  ...trainerRoutes({ enabled: TRAINER_PILOT, json, readBody, readSession, requireOwner, db, saveDb, readState: readStateStrict, unreadable: UNREADABLE, isAdmin, audit, sendPush, ownerId }),
+  ...trainerRoutes({ enabled: TRAINER_PILOT, json, readBody, readSession, requireOwner, db, saveDb, readState: readStateStrict, unreadable: UNREADABLE, isAdmin, audit, sendPush, ownerId, readPupilSummary }),
 
   /* ---------- admin dashboard ---------- */
   // One row per user, cheap enough for a personal instance (reads each state file once).

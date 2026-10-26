@@ -27,6 +27,10 @@ if [[ "$PULL" == "--pull" ]]; then
   git merge --ff-only "@{upstream}"
 fi
 
+# Build first: keep the interruption short and leave the old stack serving if build fails.
+"$ROOT/pack/scripts/apply-brand.sh" "$CLIENT"
+docker compose build
+
 # Stop writes while taking a coherent backup. Restart the old API if backup fails.
 if [[ -d "$ROOT/data" ]]; then
   docker compose stop api
@@ -34,11 +38,9 @@ if [[ -d "$ROOT/data" ]]; then
     docker compose start api
     exit 1
   fi
-  docker compose start api
 fi
 
-"$ROOT/pack/scripts/apply-brand.sh" "$CLIENT"
-docker compose up -d --build
+docker compose up -d --no-build
 
 PORT="$(awk -F= '/^WEB_PORT=/{print $2}' .env | tail -1)"
 PORT="${PORT:-8080}"

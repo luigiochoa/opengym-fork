@@ -124,3 +124,32 @@ Solo el propietario puede consultar esta vista. Otros alumnos y administradores 
 Ocultar la app o bloquear el teléfono no se interpreta como terminar la sesión. Se intenta enviar una última observación con el ejercicio y el descanso; si el navegador sigue ejecutando la app, continúan las señales. Al volver a primer plano se envía una actualización inmediata. El indicador de falta de señal conserva su comportamiento: no se presenta una observación antigua como actividad en vivo.
 
 La web no puede garantizar ejecución continua con el teléfono bloqueado. Los navegadores limitan los temporizadores de páginas ocultas y el sistema puede suspenderlas. La opción existente de mantener la pantalla encendida evita el apagado automático donde sea compatible; no fuerza el funcionamiento después de bloquear el teléfono manualmente. Documentación de referencia: [visibilidad y temporizadores](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API), [Screen Wake Lock](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API). Se requiere validar el comportamiento en los teléfonos reales del piloto.
+
+
+## Mejoras aplicadas después de la auditoría
+
+La preferencia de compartir tiene una única fuente por alumno para el control y el publicador global. La consulta inicial se reintenta con esperas de 2, 4, 8, 16 y hasta 30 segundos, y al recuperar conexión o visibilidad. Un error inicial ya no exige recargar o alternar el control.
+
+Asignación, confirmación y comentarios usan escrituras con reversión: si falla el disco, las consultas mantienen el estado previo. Al reemplazar una asignación se archiva la anterior; se conservan 50 versiones anteriores por alumno y 50 comentarios por versión. La historia anterior a esta función solo incluye la información que ya estaba guardada; no se inventan versiones perdidas. Propietario y alumno pueden consultar su historial; otros alumnos y administradores no.
+
+La ayuda conserva hasta 256 identificadores de solicitudes aceptadas por alumno durante siete días. Reintentar una solicitud atendida, aunque haya otras posteriores, devuelve su estado anterior dentro de esa retención. Un formulario nuevo cuando ya existe ayuda pendiente devuelve conflicto con el estado actual, sin añadir escrituras ni avisos. El alumno puede cancelar una ayuda pendiente enviada por error; cuando el entrenador ya la está atendiendo, debe finalizarla el entrenador.
+
+Mis alumnos reúne ayudas, renovaciones y rutinas pendientes de recepción. La ficha muestra días con entrenamientos guardados durante la semana frente a días de la rutina asignada; no implica que cada sesión haya completado esa rutina. Incluye exportación privada del historial de pagos en CSV, con protección frente a fórmulas en las notas. El alumno sigue viendo solo sus propios importes y fechas.
+
+El listado utiliza resúmenes compactos en caché y agrupa pagos una sola vez. Los resúmenes se invalidan al sincronizar y detectan cambios del archivo, fecha o semana. El historial completo se consulta al abrir la ficha. Las pantallas secundarias se cargan bajo demanda.
+
+## Operación de la versión web
+
+Mantener el `RP_ID`, `ORIGIN`, clave de sesión y datos de la instalación existente para conservar accesos. El ejemplo de piloto usa `COACH_DISABLED=1` y permite combinar `docker-compose.yml` con `pack/runtime/compose.pilot.yml` para revisar salud cada 30 segundos. Detrás del proxy HTTPS, `WEB_BIND_ADDRESS=127.0.0.1` evita exponer directamente el puerto web. `APP_BUILD` identifica la compilación.
+
+`deploy-client.sh` compila antes de interrumpir la API y respalda con las escrituras detenidas. Comprobar el respaldo con `python3 pack/scripts/check-backup.py ARCHIVO.tar.gz`; verifica estructura, JSON y permisos sin extraer o imprimir datos privados. Guardar también una copia privada fuera del servidor.
+
+`python3 pack/scripts/pilot-status.py https://DOMINIO --data-dir data --backup-dir backups` informa de salud, bandera de piloto, espacio disponible y antigüedad del respaldo, sin identidades ni secretos. Es una comprobación a demanda, no instala una tarea programada.
+
+### Validación en iPhone y Android
+
+En iPhone, usar Safari, añadir la web a la pantalla de inicio y abrirla desde ese icono antes de activar notificaciones. El soporte Web Push requiere iOS 16.4 o posterior y permiso de la persona. Fuente: [WebKit](https://webkit.org/blog/13878/).
+
+En Android, usar Chrome y permitir notificaciones para el sitio y para Chrome en el sistema. Se puede instalar la web como aplicación. Fuente: [Google Chrome](https://support.google.com/chrome/answer/3220216?co=GENIE.Platform%3DAndroid&hl=es).
+
+Probar cada sistema por separado: iniciar sesión, activar avisos en el perfil del entrenador, enviar una ayuda desde el alumno y confirmar su recepción con el teléfono del entrenador bloqueado. Después iniciar una sesión compartida, registrar una serie, minimizarla, bloquear y volver; comprobar que el descanso sigue coherente y que la interfaz distingue una señal reciente de una observación antigua. Finalizar o descartar debe retirar la actividad. La web no garantiza ejecución continua bajo bloqueo; el permiso de notificaciones no cambia esa limitación.

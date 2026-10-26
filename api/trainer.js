@@ -1,11 +1,12 @@
 // Human-trainer pilot: owner-only assignment, distinct from the optional AI Coach.
 // Assignments live in db.json, never overwrite a pupil's synced workout document.
 import crypto from 'node:crypto';
+import { summarizePupil } from './trainer-summary.js';
 import { trainerLiveRoutes } from './trainer-live.js';
 import { defaultPaymentReminders, validatePaymentReminders } from './trainer-payment-reminders.js';
 import { paymentSummary, trainerToday, validateManualPayment, PaymentValidationError } from './trainer-payments.js';
 
-export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit, sendPush, ownerId }) {
+export function trainerRoutes({ enabled, json, readBody, readSession, requireOwner, db, saveDb, readState, unreadable, isAdmin, audit, sendPush, ownerId, readPupilSummary }) {
   const routes = {};
   const gate = (req, res, owner = false) => {
     if (!enabled) { json(res, 404, { error: 'pilot disabled' }); return null; }
@@ -14,17 +15,33 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     if (!user) json(res, 401, { error: 'not signed in' });
     return user;
   };
+  const persist = patch => {
+    const before = Object.fromEntries(Object.keys(patch).map(key => [key, db[key]]));
+    Object.assign(db, patch);
+    try { saveDb(); } catch (error) {
+      for (const [key, value] of Object.entries(before)) { if (value === undefined) delete db[key]; else db[key] = value; }
+      throw error;
+    }
+  };
   const payments = () => Array.isArray(db.trainerPayments) ? db.trainerPayments : [];
   const paymentsFor = userId => payments().filter(p => p.userId === userId);
-  const savePayments = next => {
-    const before = db.trainerPayments; db.trainerPayments = next;
-    try { saveDb(); } catch (e) { db.trainerPayments = before; throw e; }
+  const savePayments = next => persist({ trainerPayments: next });
+  const assignments = () => db.trainerAssignments || {};
+  const saveAssignment = (userId, next, archive = false) => {
+    const patch = { trainerAssignments: { ...assignments(), [userId]: next } };
+    if (archive && assignments()[userId]) patch.trainerAssignmentHistory = { ...db.trainerAssignmentHistory, [userId]: [...(db.trainerAssignmentHistory?.[userId] || []), assignments()[userId]].slice(-50) };
+    persist(patch);
   };
-  const assignments = () => db.trainerAssignments || (db.trainerAssignments = {});
   const help = () => db.trainerAssistance || {};
-  const saveHelp = next => {
-    const before = db.trainerAssistance; db.trainerAssistance = next;
-    try { saveDb(); } catch (e) { db.trainerAssistance = before; throw e; }
+  const openHelp = request => request && ['pending', 'attending'].includes(request.status);
+  const RECEIPT_TTL = 7 * 86400000, RECEIPT_MAX = 256;
+  const receipts = userId => (db.trainerAssistanceReceipts?.[userId] || []).filter(r => Date.now() - r.recordedAt < RECEIPT_TTL);
+  const saveHelp = (userId, request, requestId = request.requestId) => {
+    let history = receipts(userId).map(r => r.id === request.id ? { ...r, status: request.status, updated: request.updated } : r);
+    const previous = help()[userId];
+    if (previous?.requestId && previous.id !== request.id && !history.some(r => r.requestId === previous.requestId)) history.push({ id: previous.id, requestId: previous.requestId, kind: previous.kind, status: previous.status, created: previous.created, updated: previous.updated, recordedAt: Date.now() });
+    if (requestId && !history.some(r => r.requestId === requestId)) history.push({ id: request.id, requestId, kind: request.kind, status: request.status, created: request.created, updated: request.updated, recordedAt: Date.now() });
+    persist({ trainerAssistance: { ...help(), [userId]: request }, trainerAssistanceReceipts: { ...db.trainerAssistanceReceipts, [userId]: history.slice(-RECEIPT_MAX) } });
   };
   routes['GET /api/me/assistance'] = async (req, res) => {
     const user = gate(req, res); if (!user) return;
@@ -41,19 +58,24 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
       return json(res, 400, { error: 'Identificador de solicitud inválido.' });
     const previous = help()[user.id];
     if (body.requestId && previous?.requestId === body.requestId) return json(res, 200, { request: previous });
-    if (previous && previous.status !== 'resolved') return json(res, 200, { request: previous });
+    const receipt = body.requestId && receipts(user.id).find(r => r.requestId === body.requestId);
+    if (receipt) return json(res, 200, { request: { ...receipt, userId: user.id, note: '' } });
+    if (openHelp(previous)) {
+      if (body.requestId && body.requestId !== previous.requestId) return json(res, 409, { error: 'Ya tienes una solicitud pendiente. Revisa su estado.', request: previous });
+      return json(res, 200, { request: previous });
+    }
     if (previous && Date.now() - previous.created < 60000) return json(res, 429, { error: 'Espera un minuto antes de enviar otra solicitud.' });
     const trainer = db.users.find(u => u.id === ownerId() && !u.disabled);
     if (!trainer) return json(res, 503, { error: 'Tu entrenador no está disponible.' });
     const request = { id: crypto.randomUUID(), userId: user.id, kind: body.kind, note: body.note.trim(), ...(body.requestId ? { requestId: body.requestId } : {}), created: Date.now(), status: 'pending' };
-    saveHelp({ ...help(), [user.id]: request });
+    saveHelp(user.id, request);
     // Persist first. Push delivery is best effort; the inbox remains the source of truth.
     void sendPush(trainer.id, { title: 'Solicitud de un alumno', body: `${user.name} ${request.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}.`, tag: 'trainer-assistance-' + user.id, url: '#/trainer' }).catch(e => console.error('assistance push:', e.message));
     json(res, 201, { request });
   };
   routes['GET /api/trainer/assistance'] = async (req, res) => {
     if (!gate(req, res, true)) return;
-    const requests = Object.values(help()).filter(r => r.status !== 'resolved' && db.users.some(u => u.id === r.userId && !u.disabled && !isAdmin(u)))
+    const requests = Object.values(help()).filter(r => openHelp(r) && db.users.some(u => u.id === r.userId && !u.disabled && !isAdmin(u)))
       .sort((a, b) => a.created - b.created).map(r => ({ ...r, name: db.users.find(u => u.id === r.userId).name }));
     json(res, 200, { requests });
   };
@@ -63,9 +85,19 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     const request = Object.values(help()).find(r => r.id === body?.id);
     if (!request) return json(res, 404, { error: 'Solicitud no encontrada.' });
     if (!['attending', 'resolved'].includes(body.status)) return json(res, 400, { error: 'Estado inválido.' });
-    if (request.status === 'resolved' || (request.status === 'attending' && body.status === 'attending')) return json(res, 200, { request });
+    if (!openHelp(request) || (request.status === 'attending' && body.status === 'attending')) return json(res, 200, { request });
     const updated = { ...request, status: body.status, updated: Date.now() };
-    saveHelp({ ...help(), [request.userId]: updated });
+    saveHelp(request.userId, updated);
+    json(res, 200, { request: updated });
+  };
+  routes['POST /api/me/assistance/cancel'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Solo alumnos.' });
+    const body = await readBody(req), request = help()[user.id];
+    if (!request || request.id !== body?.id) return json(res, 404, { error: 'Solicitud no encontrada.' });
+    if (request.status === 'attending') return json(res, 409, { error: 'Tu entrenador ya está atendiendo la solicitud.' });
+    const updated = openHelp(request) ? { ...request, status: 'cancelled', updated: Date.now() } : request;
+    if (updated !== request) saveHelp(user.id, updated);
     json(res, 200, { request: updated });
   };
   routes['GET /api/me/payments'] = async (req, res) => {
@@ -118,21 +150,22 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
         routines: [{ id: routine.id, name: routine.name, emoji: routine.emoji, ex: routine.ex, ...(routine.prog ? { prog: routine.prog } : {}) }],
         customEx, week: Object.fromEntries(days.map(d => [d, [routine.id]])) }
     };
-    assignments()[pupil.id] = assignment;
-    saveDb();
+    saveAssignment(pupil.id, assignment, true);
     audit(req, 'trainer.plan.assign', { user: trainer, target: pupil });
     json(res, 200, { assignment });
   };
   routes['GET /api/trainer/pupils'] = async (req, res) => {
     if (!gate(req, res, true)) return;
-    const today = trainerToday();
+    const today = trainerToday(), groupedPayments = new Map();
+    for (const payment of payments()) { if (!groupedPayments.has(payment.userId)) groupedPayments.set(payment.userId, []); groupedPayments.get(payment.userId).push(payment); }
     const pupils = db.users.filter(u => !isAdmin(u)).map(u => {
-      const s = readState(u.id);
-      const unavailable = s === unreadable;
-      const workouts = !unavailable && Array.isArray(s?.workouts) ? s.workouts.filter(w => w && Array.isArray(w.entries)) : [];
-      return { id: u.id, name: u.name, disabled: !!u.disabled, unavailable,
-        workouts: workouts.length, lastWorkout: workouts.map(w => w.d).filter(d => typeof d === 'string').sort().at(-1) || null,
-        assignment: assignments()[u.id] || null, billing: paymentSummary(paymentsFor(u.id), today) };
+      const summary = readPupilSummary ? readPupilSummary(u.id, today) : summarizePupil(readState(u.id), unreadable, today);
+      const assignment = assignments()[u.id];
+      const plannedDays = assignment?.accepted ? Object.keys(assignment.bundle?.week || {}).length : null;
+      return { id: u.id, name: u.name, disabled: !!u.disabled, unavailable: summary.unavailable, workouts: summary.workouts, lastWorkout: summary.lastWorkout,
+        weekly: { completedDays: summary.completedDays, plannedDays },
+        assignment: assignment ? { id: assignment.id, trainerName: assignment.trainerName, created: assignment.created, accepted: assignment.accepted, feedback: assignment.feedback, bundle: { name: assignment.bundle?.name || 'Rutina asignada' } } : null,
+        billing: paymentSummary(groupedPayments.get(u.id) || [], today) };
     });
     json(res, 200, { pupils, today });
   };
@@ -189,8 +222,7 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     const s = readState(user.id);
     if (s === unreadable) return json(res, 503, { error: 'pupil data unavailable' });
     if (!s?.trainerApplied?.includes(assignment.id)) return json(res, 409, { error: 'sync the imported plan first' });
-    assignment.accepted ||= Date.now();
-    saveDb();
+    if (!assignment.accepted) saveAssignment(user.id, { ...assignment, accepted: Date.now() });
     json(res, 200, { ok: true });
   };
   routes['POST /api/trainer/feedback'] = async (req, res) => {
@@ -199,10 +231,24 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     const assignment = assignments()[user.id];
     if (!assignment || assignment.id !== body.id) return json(res, 409, { error: 'assignment changed; refresh' });
     if (typeof body.text !== 'string' || body.text.length > 1000) return json(res, 400, { error: 'feedback must be at most 1000 characters' });
-    assignment.feedback = body.text.trim();
-    assignment.feedbackAt = Date.now();
-    saveDb();
+    const text = body.text.trim(), at = Date.now();
+    if (text !== assignment.feedback) {
+      const previous = assignment.feedbackHistory || (assignment.feedback ? [{ text: assignment.feedback, at: assignment.feedbackAt || assignment.created }] : []);
+      saveAssignment(user.id, { ...assignment, feedback: text, feedbackAt: at, feedbackHistory: [...previous, { text, at }].slice(-50) });
+    }
     json(res, 200, { ok: true });
+  };
+  const assignmentHistory = userId => ({ assignment: assignments()[userId] || null, history: [...(db.trainerAssignmentHistory?.[userId] || [])].reverse() });
+  routes['GET /api/trainer/assignment-history'] = async (req, res) => {
+    if (!gate(req, res, true)) return;
+    const id = new URL(req.url, 'http://x').searchParams.get('userId');
+    if (!db.users.some(u => u.id === id && !isAdmin(u))) return json(res, 404, { error: 'Alumno no encontrado.' });
+    json(res, 200, assignmentHistory(id));
+  };
+  routes['GET /api/me/assignment-history'] = async (req, res) => {
+    const user = gate(req, res); if (!user) return;
+    if (isAdmin(user)) return json(res, 403, { error: 'Solo alumnos.' });
+    json(res, 200, assignmentHistory(user.id));
   };
   return { ...routes, ...trainerLiveRoutes({ gate, json, readBody, db, saveDb, isAdmin }) };
 }

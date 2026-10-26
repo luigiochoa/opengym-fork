@@ -33,7 +33,7 @@ it('prevents duplicate pending requests and displays the trainer acknowledgement
   api.mockResolvedValue({ request: { status: 'pending' } })
   await show(<StudentAssistance />)
   expect(host.textContent).toContain('Esperando al entrenador')
-  expect(host.querySelector('button')).toBeNull()
+  expect([...host.querySelectorAll('button')].some(b => b.textContent.includes('Cancelar solicitud'))).toBe(true)
   api.mockResolvedValue({ request: { status: 'attending' } })
   await act(async () => window.dispatchEvent(new Event('assistance-change')))
   expect(host.textContent).toContain('ya vio tu solicitud')
@@ -132,4 +132,14 @@ it('still displays a slow response when the next scheduled poll is already in fl
     await act(async () => finishFirst({ request: { status: 'pending' } }))
     expect(host.textContent).toContain('Esperando al entrenador')
   } finally { vi.useRealTimers() }
+})
+
+it('cancels an accidental pending request and shows its confirmation', async () => {
+  api.mockResolvedValueOnce({ request: { id: 'help1', status: 'pending' } })
+  await show(<StudentAssistance />)
+  api.mockResolvedValueOnce({ request: { id: 'help1', status: 'cancelled' } })
+  await act(async () => [...host.querySelectorAll('button')].find(b => b.textContent === 'Cancelar solicitud').click())
+  expect(api).toHaveBeenCalledWith('/api/me/assistance/cancel', { method: 'POST', body: JSON.stringify({ id: 'help1' }) })
+  expect(host.textContent).toContain('Cancelaste esta solicitud')
+  expect(host.textContent).toContain('Pedir ayuda a mi entrenador')
 })

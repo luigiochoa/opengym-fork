@@ -290,3 +290,71 @@ test('live-session routes integrate with pilot flag, owner access and persisted 
   assert.equal((await off.req('GET', '/api/trainer/live', owner)).status, 404);
   assert.equal((await off.req('POST', '/api/me/live-activity', pupil, payload)).status, 404);
 });
+
+test('failed assignment, feedback and acceptance writes never become visible', async t => {
+  const h = await start(t);
+  const blocked = path.join(h.dir, 'db.json.tmp');
+  fs.mkdirSync(blocked);
+  const input = { userId: pupil, routineId: 'routine-1', days: [1] };
+  assert.equal((await h.req('POST', '/api/trainer/assign', owner, input)).status, 500);
+  assert.equal((await h.req('GET', '/api/trainer/assignment', pupil)).body.assignment, null);
+  fs.rmdirSync(blocked);
+  const sent = await h.req('POST', '/api/trainer/assign', owner, input), id = sent.body.assignment.id;
+  fs.writeFileSync(path.join(h.dir, 'state-' + pupil + '.json'), JSON.stringify({ trainerApplied: [id] }));
+  fs.mkdirSync(blocked);
+  assert.equal((await h.req('POST', '/api/trainer/feedback', pupil, { id, text: 'No se debe guardar' })).status, 500);
+  assert.equal((await h.req('POST', '/api/trainer/assignment/accept', pupil, { id })).status, 500);
+  const visible = (await h.req('GET', '/api/trainer/assignment', pupil)).body.assignment;
+  assert.equal(visible.feedback, ''); assert.equal(visible.accepted, null);
+  fs.rmdirSync(blocked);
+  assert.equal((await h.req('POST', '/api/trainer/feedback', pupil, { id, text: 'Guardado' })).status, 200);
+  assert.equal((await h.req('POST', '/api/trainer/assignment/accept', pupil, { id })).status, 200);
+});
+
+test('versions and comments survive replacement and remain private to pupil and owner', async t => {
+  const h = await start(t), input = { userId: pupil, routineId: 'routine-1', days: [1] };
+  const first = await h.req('POST', '/api/trainer/assign', owner, input), id = first.body.assignment.id;
+  await h.req('POST', '/api/trainer/feedback', pupil, { id, text: 'Primero' });
+  await h.req('POST', '/api/trainer/feedback', pupil, { id, text: 'Segundo' });
+  await h.req('POST', '/api/trainer/assign', owner, { ...input, days: [2] });
+  const history = (await h.req('GET', '/api/me/assignment-history', pupil)).body;
+  assert.equal(history.history[0].id, id);
+  assert.deepEqual(history.history[0].feedbackHistory.map(c => c.text), ['Primero', 'Segundo']);
+  assert.equal(history.assignment.bundle.week[2][0], 'routine-1');
+  assert.equal((await h.req('GET', '/api/me/assignment-history?userId=' + pupil, other)).body.history.length, 0);
+  assert.equal((await h.req('GET', '/api/trainer/assignment-history?userId=' + pupil, secondAdmin)).status, 403);
+  assert.equal((await h.req('GET', '/api/trainer/assignment-history?userId=' + pupil, pupil)).status, 403);
+  assert.equal((await h.req('GET', '/api/trainer/assignment-history?userId=' + pupil, owner)).body.history[0].id, id);
+});
+
+test('pupil can cancel only their pending help and competing submissions never add writes', async t => {
+  const h = await start(t);
+  const first = await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: 'Duda', requestId: 'cancel-request-001' });
+  const id = first.body.request.id;
+  assert.equal((await h.req('POST', '/api/me/assistance/cancel', other, { id })).status, 404);
+  assert.equal((await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: '', requestId: 'competing-001' })).status, 409);
+  assert.equal((await h.req('POST', '/api/me/assistance/cancel', pupil, { id })).body.request.status, 'cancelled');
+  assert.equal((await h.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 0);
+  const retried = await h.req('POST', '/api/me/assistance', pupil, { kind: 'question', note: '', requestId: 'cancel-request-001' });
+  assert.equal(retried.body.request.id, id); assert.equal(retried.body.request.status, 'cancelled');
+  const second = await h.req('POST', '/api/me/assistance', other, { kind: 'assistance', note: '', requestId: 'attending-001' });
+  await h.req('POST', '/api/trainer/assistance/status', owner, { id: second.body.request.id, status: 'attending' });
+  assert.equal((await h.req('POST', '/api/me/assistance/cancel', other, { id: second.body.request.id })).status, 409);
+});
+
+test('late replay of A after B was resolved returns A without another push', async () => {
+  const realNow = Date.now; let clock = realNow(), pushes = 0;
+  Date.now = () => clock;
+  try {
+    const db = { users: [{ id: owner, admin: true }, { id: pupil, name: 'Ana' }] };
+    let body;
+    const routes = trainerRoutes({ enabled: true, db, json: (res, status, data) => Object.assign(res, { status, body: data }), readBody: async () => body, readSession: () => db.users[1], requireOwner: () => db.users[0], isAdmin: u => !!u.admin, ownerId: () => owner, saveDb() {}, sendPush: async () => { pushes++; } });
+    const call = async (route, input) => { body = input; const res = {}; await routes[route]({}, res); return res; };
+    const a = await call('POST /api/me/assistance', { kind: 'question', note: 'A', requestId: 'request-a-001' });
+    await call('POST /api/trainer/assistance/status', { id: a.body.request.id, status: 'resolved' }); clock += 120000;
+    const b = await call('POST /api/me/assistance', { kind: 'question', note: 'B', requestId: 'request-b-002' });
+    await call('POST /api/trainer/assistance/status', { id: b.body.request.id, status: 'resolved' }); clock += 120000;
+    const again = await call('POST /api/me/assistance', { kind: 'question', note: 'A', requestId: 'request-a-001' });
+    assert.equal(again.status, 200); assert.equal(again.body.request.id, a.body.request.id); assert.equal(again.body.request.status, 'resolved'); assert.equal(pushes, 2);
+  } finally { Date.now = realNow; }
+});

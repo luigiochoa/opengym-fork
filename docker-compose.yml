@@ -13,6 +13,8 @@ services:
     build:
       context: ./api
       target: ${API_TARGET:-default}
+      args:
+        VCS_REF: ${APP_BUILD:-dev}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -40,6 +42,7 @@ services:
       context: .
       dockerfile: web/Dockerfile
       args:
+        APP_BUILD: ${APP_BUILD:-}
         VITE_APP_NAME: ${VITE_APP_NAME:-openGym}
         VITE_APP_DESCRIPTION: ${VITE_APP_DESCRIPTION:-Personal gym & body weight tracker}
         VITE_DEFAULT_ACCENT: ${VITE_DEFAULT_ACCENT:-lime}
@@ -55,7 +58,7 @@ services:
       api:
         condition: service_started
     ports:
-      - "${WEB_PORT:-8080}:${NGINX_PORT:-80}"
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:${NGINX_PORT:-80}"
     # nginx renders its config at start-up from these (web/nginx.conf.template),
     # so the API service does not have to be called `api`. Defaults are the old
     # hardcoded values, so an existing .env and an existing stack are unaffected.
