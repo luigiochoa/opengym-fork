@@ -268,7 +268,7 @@ describe('the web container refuses a BASE_PATH it cannot serve', () => {
     expect(upgrade).toBeGreaterThan(root)
     expect(finalUser).toBeGreaterThan(upgrade)
     expect(dockerfile).toMatch(/^ENV NGINX_PORT=80$/m)
-    expect(dockerfile).toMatch(/^COPY web\/nginx\.conf\.template \/etc\/nginx\/templates\/default\.conf\.template$/m)
+    expect(dockerfile).toMatch(/^COPY --chown=101:101 --chmod=644 web\/nginx\.conf\.template \/etc\/nginx\/templates\/default\.conf\.template$/m)
   })
 })
 
