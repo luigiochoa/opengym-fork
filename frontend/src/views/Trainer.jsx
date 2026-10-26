@@ -1,3 +1,4 @@
+import { TrainerLive } from '../components/TrainerLive.jsx'
 import { TrainerAssistance } from '../components/Assistance.jsx'
 import '../trainer-pilot.css'
 import { TrainerPayments, PaymentBadge } from '../components/TrainerPayments.jsx'
@@ -95,6 +96,7 @@ export default function Trainer() {
     <Section>
       <Row icon="clock" iconTint="var(--orange)" title="Control de pagos" subtitle={renewalCount ? `${overdueCount} ${overdueCount === 1 ? 'vencido' : 'vencidos'} · ${renewalCount - overdueCount} por renovar en 7 días` : 'Sin renovaciones pendientes en los próximos 7 días'} accessory="chevron" onClick={() => setPupilFilter(renewalCount ? 'renewals' : 'all')} />
     </Section>
+    <TrainerLive />
     <TrainerAssistance />
     <Section title="Asignar una rutina" footer={routineOptions.length > 1 ? 'El alumno la recibirá en Inicio. Su historial y las demás rutinas se conservan.' : 'Crea una rutina con ejercicios en Plan para poder enviarla.'}>
       <SelectRow icon="dumbbell" title="Rutina" value={routineId} options={routineOptions} onChange={setRoutineId} sheetTitle="Seleccionar rutina" />

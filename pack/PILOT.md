@@ -106,3 +106,14 @@ Si el propietario tiene una suscripción push, se intenta enviar un aviso con el
 Los reintentos del mismo formulario conservan su identificador: si el entrenador ya atendió esa solicitud, el reintento devuelve el estado atendido y no genera otro aviso. Las consultas lentas no sobrescriben respuestas más recientes ni impiden mostrar resultados cuando la red tarda más de diez segundos. Al recuperar conexión se vuelve a consultar. El envío confirmado actualiza al alumno de inmediato. Un formulario abierto antes de cambiar de cuenta no puede enviarse con la cuenta nueva.
 
 Un fallo de conexión conserva el detalle en el formulario y muestra una indicación en español para reintentar; el borrador no se garantiza tras cerrar o recargar la página. Las solicitudes muestran fecha y hora en el idioma de la app. Las pruebas cubren concurrencia, reinicio del servidor, aislamiento de cuentas, fallo de push y reversión cuando falla el guardado.
+
+
+## Sesiones compartidas con el entrenador
+
+En Inicio o en una sesión activa, el alumno puede activar **Compartir sesión con mi entrenador**. Está desactivado por defecto. La preferencia se guarda en `db.json`; el ejercicio, las series y el descanso se conservan solo en memoria de la API y no crean un historial de vigilancia.
+
+En **Mis alumnos → Sesiones compartidas**, el propietario ve nombre del alumno, rutina, ejercicio seleccionado, series registradas y estado: sesión abierta, descanso con cuenta regresiva, descanso pausado o descanso terminado. La vista consulta cada cinco segundos. El alumno envía cambios del ejercicio, series o temporizador y una señal cada diez segundos mientras tiene abierta la pantalla del entrenamiento. Se excluyen edición de sesiones guardadas y registro de entrenamientos pasados. Al minimizar o salir de esa pantalla se deja de publicar el detalle; al volver se inicia una señal nueva.
+
+Después de 35 segundos sin señal se indica **Sin señal reciente** y se conserva la última observación, con su hora, durante un máximo de cinco minutos. Luego desaparece. El final de una cuenta regresiva no significa que el alumno haya retomado una serie: se indica que el descanso terminó y se espera actualización. La actividad es aproximada según lo registrado en la app, no una medición de movimientos o repeticiones físicas. La suspensión de la app por el teléfono y la falta de conexión pueden interrumpir las señales.
+
+Solo el propietario puede consultar esta vista. Otros alumnos y administradores no tienen acceso al detalle. Apagar el control retira la actividad del servidor y rechaza nuevas señales activas hasta volver a autorizarlo; la pantalla del entrenador refleja el cambio en su siguiente consulta. El reinicio de la API borra la actividad y la siguiente señal vuelve a publicarla. El contador de mensajes evita que una señal atrasada reemplace un estado más reciente o resucite una sesión cerrada.

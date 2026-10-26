@@ -1378,6 +1378,7 @@ function removeAccount(u) {
   if (db.trainerPayments) db.trainerPayments = db.trainerPayments.filter(p => p.userId !== u.id);
   if (db.trainerAssignments) delete db.trainerAssignments[u.id];
   if (db.trainerPaymentReminders) delete db.trainerPaymentReminders[u.id];
+  if (db.trainerLiveSharing) delete db.trainerLiveSharing[u.id];
   if (db.trainerAssistance) delete db.trainerAssistance[u.id];
   if (db.trainerPaymentNotices) delete db.trainerPaymentNotices[u.id];
   dropDeviceLinks(db, u.id);

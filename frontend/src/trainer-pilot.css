@@ -35,3 +35,7 @@
 
 .trainer-payment-fields input[type="date"]{color-scheme:dark}
 :root[data-theme="light"] .trainer-payment-fields input[type="date"]{color-scheme:light}
+
+.trainer-live-entry+.trainer-live-entry{border-top:var(--hair) solid var(--sep)}
+.tag.trainer-live-badge{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.tag.trainer-live-badge.stale{background:var(--surface-3);color:var(--label-2)}

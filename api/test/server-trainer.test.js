@@ -269,3 +269,24 @@ test('assistance survives a fresh server boot and the same retry does not reopen
   assert.equal(retry.body.request.id, id);
   assert.equal((await rebooted.req('GET', '/api/trainer/assistance', owner)).body.requests.length, 0);
 });
+
+test('live-session routes integrate with pilot flag, owner access and persisted opt-in only', async t => {
+  const h = await start(t);
+  assert.equal((await h.req('GET', '/api/trainer/live')).status, 401);
+  assert.equal((await h.req('GET', '/api/trainer/live', secondAdmin)).status, 403);
+  assert.equal((await h.req('GET', '/api/me/live-sharing', pupil)).body.enabled, false);
+  assert.equal((await h.req('POST', '/api/me/live-sharing', pupil, { enabled: true })).status, 200);
+  const payload = { active: true, sessionId: 'real-session-001', sequence: 1, workout: 'Piernas', exercise: 'Sentadilla', phase: 'rest', restSeconds: 90, setsDone: 1, setsTotal: 6 };
+  assert.equal((await h.req('POST', '/api/me/live-activity', pupil, payload)).status, 200);
+  const result = await h.req('GET', '/api/trainer/live', owner);
+  assert.equal(result.body.pupils.find(p => p.id === pupil).activity.phase, 'rest');
+  assert.equal((await h.req('GET', '/api/trainer/live', other)).status, 403);
+  const saved = JSON.parse(fs.readFileSync(path.join(h.dir, 'db.json')));
+  assert.equal(saved.trainerLiveSharing[pupil], true);
+  assert.ok(!JSON.stringify(saved).includes('Sentadilla'));
+  await h.req('POST', '/api/me/live-sharing', pupil, { enabled: false });
+  assert.equal((await h.req('GET', '/api/trainer/live', owner)).body.pupils.find(p => p.id === pupil).activity, null);
+  const off = await start(t, false);
+  assert.equal((await off.req('GET', '/api/trainer/live', owner)).status, 404);
+  assert.equal((await off.req('POST', '/api/me/live-activity', pupil, payload)).status, 404);
+});

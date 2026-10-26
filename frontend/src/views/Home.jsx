@@ -1,3 +1,4 @@
+import { StudentLiveSharing } from '../components/TrainerLive.jsx'
 import { StudentAssistance } from '../components/Assistance.jsx'
 import { APP_NAME } from '../lib/brand.js'
 import { StudentPaymentCard } from '../components/StudentPayments.jsx'
@@ -114,6 +115,7 @@ export default function Home() {
     <TrainerHome />
     <StudentPaymentCard />
     <StudentAssistance />
+    <StudentLiveSharing />
 
     <div className="card">
       {/* A coach week runs by order, not by weekday, so its progress row stands in for the

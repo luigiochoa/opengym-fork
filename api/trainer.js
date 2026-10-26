@@ -1,6 +1,7 @@
 // Human-trainer pilot: owner-only assignment, distinct from the optional AI Coach.
 // Assignments live in db.json, never overwrite a pupil's synced workout document.
 import crypto from 'node:crypto';
+import { trainerLiveRoutes } from './trainer-live.js';
 import { defaultPaymentReminders, validatePaymentReminders } from './trainer-payment-reminders.js';
 import { paymentSummary, trainerToday, validateManualPayment, PaymentValidationError } from './trainer-payments.js';
 
@@ -203,5 +204,5 @@ export function trainerRoutes({ enabled, json, readBody, readSession, requireOwn
     saveDb();
     json(res, 200, { ok: true });
   };
-  return routes;
+  return { ...routes, ...trainerLiveRoutes({ gate, json, readBody, db, saveDb, isAdmin }) };
 }
