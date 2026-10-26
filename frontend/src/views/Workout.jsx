@@ -2026,7 +2026,7 @@ function ActiveWorkout() {
         anywhere in a long stack. */}
     {listMode && chipRow}
     </div>
-    {!editing && !A.backfill && <><StudentAssistance /><StudentLiveSharing inSession /></>}
+    {!editing && !A.backfill && <><StudentAssistance /><StudentLiveSharing /></>}
     {editing && <p className="muted small">{t('Editing a saved workout. Date and duration stay unchanged.')}</p>}
     {A.backfill && <div className="muted small" style={{ marginBottom: 8 }}>{t('Logging a past workout, so no rest timers.')}</div>}
 

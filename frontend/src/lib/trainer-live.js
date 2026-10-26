@@ -4,7 +4,7 @@ import { exerciseNameFor } from './i18n-core.js'
 
 // This reports the selected exercise and recorded sets, never inferred physical movement.
 export function liveSnapshot(active, timer, now = Date.now()) {
-  if (!active || active.backfill) return { active: false }
+  if (!active || active.backfill || active.editingWorkoutId) return { active: false }
   const entries = Array.isArray(active.entries) ? active.entries : []
   const entry = entries[active.cur] || entries[0]
   const sets = entries.flatMap(e => Array.isArray(e.sets) ? e.sets.filter(Boolean) : [])

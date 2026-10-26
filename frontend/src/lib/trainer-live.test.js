@@ -11,6 +11,7 @@ it('reports the selected exercise and only the recorded progress', () => {
 it('does not publish absent sessions or historical edits', () => {
   expect(liveSnapshot(null, null)).toEqual({ active: false })
   expect(liveSnapshot({ ...active, backfill: true }, null)).toEqual({ active: false })
+  expect(liveSnapshot({ ...active, editingWorkoutId: 'saved-workout' }, null)).toEqual({ active: false })
 })
 it('distinguishes a running rest, a paused rest, and a completed rest', () => {
   expect(liveSnapshot(active, { endsAt: 5000, left: 4 }, 1000).phase).toBe('rest')

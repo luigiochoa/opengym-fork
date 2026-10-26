@@ -8,24 +8,31 @@ import { dateLocale } from '../lib/i18n-core.js'
 import { Section, Row, Switch } from './ui.jsx'
 
 const preferenceEvent = 'trainer-live-preference'
-export function StudentLiveSharing({ inSession = false }) {
+const statusEvent = 'trainer-live-status'
+// The publisher is mounted once in App; route pages only render the privacy control.
+export function LiveActivityPublisher() { return <SharingController publisher /> }
+export function StudentLiveSharing() { return <SharingController /> }
+function SharingController({ publisher = false }) {
   const user = useStore(s => s.user)
   const pilot = useStore(s => s.config?.trainer_pilot)
   const allowed = !!(pilot && user?.id && !user.admin)
+  const session = useStore(s => { const active = s.S.active; return active && !active.backfill && !active.editingWorkoutId ? active.start || 'active' : null })
   const [prefs, setPrefs] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const enabled = prefs?.id === user?.id && prefs?.enabled === true
   useEffect(() => {
     if (!allowed) return
-    let alive = true
-    const load = () => api('/api/me/live-sharing').then(data => { if (alive) { setPrefs({ id: user.id, enabled: data.enabled }); setError('') } }).catch(() => { if (alive) setError('No pudimos consultar esta preferencia. Revisa tu conexión.') })
-    const changed = event => { if (event.detail?.id === user.id) setPrefs(event.detail) }
-    load(); window.addEventListener(preferenceEvent, changed)
-    return () => { alive = false; window.removeEventListener(preferenceEvent, changed) }
+    let alive = true, revision = 0
+    const current = ++revision
+    const load = () => api('/api/me/live-sharing').then(data => { if (alive && current === revision) { setPrefs({ id: user.id, enabled: data.enabled }); setError('') } }).catch(() => { if (alive && current === revision) setError('No pudimos consultar esta preferencia. Revisa tu conexión.') })
+    const changed = event => { if (event.detail?.id === user.id) { ++revision; setPrefs(event.detail) } }
+    const status = event => { if (event.detail?.id === user.id) setError(event.detail.error || '') }
+    load(); window.addEventListener(preferenceEvent, changed); window.addEventListener(statusEvent, status)
+    return () => { alive = false; window.removeEventListener(preferenceEvent, changed); window.removeEventListener(statusEvent, status) }
   }, [allowed, user?.id])
   useEffect(() => {
-    if (!allowed || !enabled || !inSession) return
+    if (!allowed || !enabled || !publisher || session === null) return
     const userId = user.id, sessionId = crypto.randomUUID()
     let sequence = 0, stopped = false, suspended = false, sending = false, pending = null, debounce, last = ''
     const drain = async () => {
@@ -33,11 +40,11 @@ export function StudentLiveSharing({ inSession = false }) {
       const snapshot = pending.active ? liveSnapshot(useStore.getState().S.active, useUI.getState().timer) : pending; pending = null; sending = true
       try {
         await api('/api/me/live-activity', { method: 'POST', body: JSON.stringify({ ...snapshot, restSeconds: snapshot.phase === 'rest' ? Math.max(1, Math.ceil((snapshot.restEndsAt - Date.now()) / 1000)) : null, sessionId, sequence: ++sequence }) })
-        if (!stopped) setError('')
+        if (!stopped) window.dispatchEvent(new CustomEvent(statusEvent, { detail: { id: userId, error: '' } }))
       } catch (e) {
         if (!stopped) {
-          setError('No se pudo actualizar tu actividad. Se reintentará con conexión.')
-          if (e.status === 403) { setPrefs({ id: userId, enabled: false }); pending = null }
+          window.dispatchEvent(new CustomEvent(statusEvent, { detail: { id: userId, error: 'No se pudo actualizar tu actividad. Se reintentará con conexión.' } }))
+          if (e.status === 403) { window.dispatchEvent(new CustomEvent(preferenceEvent, { detail: { id: userId, enabled: false } })); pending = null }
         }
       } finally { sending = false; if (pending) void drain() }
     }
@@ -50,18 +57,27 @@ export function StudentLiveSharing({ inSession = false }) {
     }
     const schedule = () => { clearTimeout(debounce); debounce = setTimeout(() => ping(), 250) }
     const visible = () => { if (document.visibilityState === 'visible') { suspended = false; ping(true) } }
-    const leave = () => { suspended = true; pending = null; beacon('/api/me/live-activity', { active: false, sessionId, sequence: ++sequence }) }
+    const lastSignal = () => {
+      if (stopped || useStore.getState().user?.id !== userId) return
+      const snapshot = liveSnapshot(useStore.getState().S.active, useUI.getState().timer)
+      const sent = beacon('/api/me/live-activity', { ...snapshot, restSeconds: snapshot.phase === 'rest' ? Math.max(1, Math.ceil((snapshot.restEndsAt - Date.now()) / 1000)) : null, sessionId, sequence: ++sequence })
+      if (!sent && !suspended) ping(true)
+    }
+    const visibility = () => { if (document.visibilityState === 'hidden') lastSignal(); else visible() }
+    // A hidden/closed page is not evidence the workout ended. Leave a final observation;
+    // its server timestamp becomes stale if the OS suspends us. Only ending the session stops it.
+    const leave = () => { pending = null; lastSignal(); suspended = true }
     const offStore = useStore.subscribe(schedule), offTimer = useUI.subscribe(schedule)
     ping(true)
     const timer = setInterval(() => ping(true), 10000)
-    window.addEventListener('online', visible); window.addEventListener('pagehide', leave); window.addEventListener('pageshow', visible); document.addEventListener('visibilitychange', visible)
+    window.addEventListener('online', visible); window.addEventListener('pagehide', leave); window.addEventListener('pageshow', visible); document.addEventListener('visibilitychange', visibility)
     return () => {
       stopped = true; clearInterval(timer); clearTimeout(debounce); offStore(); offTimer()
-      window.removeEventListener('online', visible); window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', visible); document.removeEventListener('visibilitychange', visible)
+      window.removeEventListener('online', visible); window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', visible); document.removeEventListener('visibilitychange', visibility)
       send({ active: false })
     }
-  }, [allowed, enabled, inSession, user?.id])
-  if (!allowed) return null
+  }, [allowed, enabled, publisher, session, user?.id])
+  if (!allowed || publisher) return null
   const toggle = async () => {
     const id = user.id
     setBusy(true); setError('')
@@ -73,7 +89,7 @@ export function StudentLiveSharing({ inSession = false }) {
     } catch { setError('No se pudo guardar. Revisa tu conexión y vuelve a intentar.') }
     finally { setBusy(false) }
   }
-  return <Section footer={error || (enabled ? 'Solo tu entrenador ve el ejercicio seleccionado, las series y el descanso mientras tienes abierto el entrenamiento. Puedes dejar de compartir cuando quieras.' : 'Comparte tu actividad con tu entrenador para que pueda acompañarte durante la sesión.')}>
+  return <Section footer={error || (enabled ? 'Solo tu entrenador ve el ejercicio seleccionado, las series y el descanso mientras tu sesión siga activa, incluso al cambiar de pantalla. Al terminar o descartar dejas de compartir. Si el teléfono suspende la app, se mostrará la última señal.' : 'Comparte tu actividad con tu entrenador para que pueda acompañarte durante la sesión.')}>
     <Row icon="personCircle" iconTint="var(--indigo)" title="Compartir sesión con mi entrenador" subtitle={enabled ? 'Activado' : 'Desactivado'}><Switch aria-label="Compartir sesión con mi entrenador" checked={enabled} disabled={busy || prefs?.id !== user.id} onChange={toggle} /></Row>
   </Section>
 }
