@@ -3,6 +3,18 @@
 Base integrada: **openGym v1.4.2**. `gym-local` no participa en esta POC.
 La pantalla **Mis alumnos** es para el entrenador humano; el Coach de IA del original es otra función y no hace falta configurarlo.
 
+## Probar localmente sin servidor
+
+Desde la raíz del repositorio, instalar una vez:
+
+```bash
+npm ci --ignore-scripts --omit=optional --prefix api
+npm ci --ignore-scripts --prefix frontend
+npm run pilot:local
+```
+
+Abrir **http://localhost:5174** y elegir **Iniciar sesión con contraseña**. El iniciador muestra la contraseña de los perfiles ficticios **Entrenador**, **Ana** y **Bea**. Para cambiar de rol, cerrar sesión o usar una ventana privada. Los datos de prueba se conservan en `work/local-pilot/`; no utiliza el `.env` ni los datos de producción. La web y la API escuchan solo en el equipo local. Detener con Ctrl+C y volver a iniciar con el mismo comando conserva la prueba. Se pueden cambiar los puertos con `PILOT_WEB_PORT` y `PILOT_API_PORT`.
+
 ## Preparar una instancia
 
 1. Trabajar sobre esta rama en una copia dedicada. Conservar el dominio y el directorio `data/` de la instancia existente: las passkeys dependen de `RP_ID` y `ORIGIN`.
