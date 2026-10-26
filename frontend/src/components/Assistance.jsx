@@ -87,7 +87,7 @@ export function StudentAssistance() {
   }
   return <Section footer={cancelError || error || undefined}><Row icon="bell" iconTint="var(--orange)" title={pending ? 'Ayuda solicitada' : 'Pedir ayuda a mi entrenador'} subtitle={data?.request ? labels[data.request.status] : 'Asistencia con un ejercicio o una duda'} accessory={pending ? undefined : 'chevron'} onClick={pending ? undefined : () => useUI.getState().openSheet(close => <RequestSheet close={close} />)} />{data?.request?.status === 'pending' && <div className="trainer-form-action"><Button size="sm" variant="plain" disabled={cancelling} onClick={cancel}>{cancelling ? 'Cancelando…' : 'Cancelar solicitud'}</Button></div>}</Section>
 }
-export function TrainerAssistance({ onCount }) {
+export function TrainerAssistance({ onCount, hideEmpty = false }) {
   const { allowed, data, error } = useAssistance(true)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState('')
@@ -106,6 +106,7 @@ export function TrainerAssistance({ onCount }) {
     catch { setPushMessage('No se pudieron activar. Revisa el permiso de notificaciones del navegador.') }
     finally { setBusy(false) }
   }
+  if (hideEmpty && !error && !actionError && (!data || !data.requests.length)) return null
   return <Section title="Solicitudes de ayuda" footer={error || actionError || pushMessage || 'Se actualizan cada 10 segundos mientras esta pantalla está abierta.'}>
     {!data ? <Row icon="clock" title="Consultando solicitudes…" /> : !data.requests.length ? <Row icon="checkCircle" iconTint="var(--green)" title="Sin solicitudes pendientes" subtitle="Tus alumnos pueden pedir ayuda desde Inicio o durante su sesión." /> : data.requests.map(r => <div key={r.id}>
       <Row icon="bell" iconTint="var(--orange)" title={`${r.name} ${r.kind === 'question' ? 'tiene una duda' : 'necesita asistencia'}`} subtitle={`${new Date(r.created).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${r.status === 'attending' ? 'En atención' : 'Pendiente'}`} />

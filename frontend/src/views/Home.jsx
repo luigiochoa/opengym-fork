@@ -1,9 +1,10 @@
 import { StudentLiveSharing } from '../components/TrainerLive.jsx'
 import { StudentAssistance } from '../components/Assistance.jsx'
 import { APP_NAME } from '../lib/brand.js'
+import PaymentBadge from '../components/PaymentBadge.jsx'
 import { StudentPaymentCard } from '../components/StudentPayments.jsx'
 import { TrainerHome } from '../components/TrainerPilot.jsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { effectiveRoutines, effectiveRoutineIds, nextTrainingDay, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
@@ -22,11 +23,23 @@ import { glyphOf } from '../lib/glyphs.js'
 import { dayNoteOf } from '../lib/day-notes.js'
 import { weighInAt } from '../lib/bodyweight.js'
 
+function StudentCoachHub({ active }) {
+  const [expanded, setExpanded] = useState(false)
+  const [assignment, setAssignment] = useState({ pending: false })
+  const [billing, setBilling] = useState(null)
+  useEffect(() => { if (assignment.pending) setExpanded(true) }, [assignment.pending, assignment.id])
+  return <details className="student-coach-hub" open={expanded} onToggle={e => setExpanded(e.currentTarget.open)}>
+    <summary><span className="lrow-i" style={{ '--tint': 'var(--indigo)' }}><Icon name="personCircle" /></span><span className="student-coach-label"><strong>{assignment.trainerName && assignment.trainerName !== 'Entrenador' ? `Mi entrenador · ${assignment.trainerName}` : 'Mi entrenador'}</strong><span>Rutina, pagos y comentarios</span></span>{assignment.pending ? <span className="tag acc">Rutina nueva</span> : billing && ['overdue', 'due', 'upcoming'].includes(billing.status) ? <PaymentBadge summary={billing} /> : null}<Icon name="chevronRight" className="student-coach-chevron" /></summary>
+    <div className="student-coach-body"><TrainerHome onAssignmentStatus={setAssignment} /><StudentPaymentCard onSummary={setBilling} />{!active && <StudentLiveSharing />}</div>
+  </details>
+}
+
 // Home = what to do now + a quick glance. Deep charts & history live in Stats.
 export default function Home() {
   const nav = useNavigate()
   const S = useStore(s => s.S)
   const user = useStore(s => s.user)
+  const pilot = useStore(s => s.config?.trainer_pilot)
   // The banner switched off and the sync stuck: a dot on the gear (Settings → Show connection status).
   const trouble = useConnectionTrouble()
   const [weekOffset, setWeekOffset] = useState(0)
@@ -112,26 +125,9 @@ export default function Home() {
       <button className="iconbtn" onClick={() => nav('/settings')} aria-label={trouble ? t('Settings') + ', ' + t('Connection problem') : t('Settings')}><Icon name="gear" />{trouble && <span className="tab-dot" aria-hidden="true" />}</button>
     </div>
 
-    <TrainerHome />
-    <StudentPaymentCard />
-    <StudentAssistance />
-    <StudentLiveSharing />
+    {user?.owner && <TrainerHome />}
 
-    <div className="card">
-      {/* A coach week runs by order, not by weekday, so its progress row stands in for the
-          seven dots (components/QueueRow.jsx). The today row below stays as it is: the queue's
-          next session reaches it through effectiveRoutineIds like any planned routine. */}
-      {rotating ? (queue ? <QueueRow S={S} today={todayISO()} onStart={onQueueStart} managed={managedQueue} /> : <div className="empty">
-        {t('No rotation yet. Add routines to it in Plan.')}
-        <div style={{ marginTop: 10 }}><Button size="sm" variant="tinted" onClick={() => nav('/plan')}>{t('Set up in Plan')}</Button></div>
-      </div>) : <>
-        <div className="row between" style={{ marginBottom: 8 }}>
-          <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w - 1)} aria-label={t('Previous week')}><Icon name="chevronLeft" /></button>
-          <div className="small muted" style={{ fontWeight: 500 }}>{wkLabel}</div>
-          <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w + 1)} aria-label={t('Next week')}><Icon name="chevronRight" /></button>
-        </div>
-        <div className="week">{strip}</div>
-      </>}
+    <div className="card home-today-card">
       {/* Once today's session is logged the row stops asking for it. The week strip already
           knew (its dot goes 'done'); this row did not, so a finished day kept showing the
           routine name behind a green Start tag and read as still outstanding (issue #4).
@@ -167,7 +163,27 @@ export default function Home() {
           {t('Choose a different workout')}
         </Button>
       </div>}
+      {/* A coach week runs by order, not by weekday, so its progress row stands in for the
+          seven dots (components/QueueRow.jsx). The today row below stays as it is: the queue's
+          next session reaches it through effectiveRoutineIds like any planned routine. */}
+      {rotating ? (queue ? <QueueRow S={S} today={todayISO()} onStart={onQueueStart} managed={managedQueue} /> : <div className="empty">
+        {t('No rotation yet. Add routines to it in Plan.')}
+        <div style={{ marginTop: 10 }}><Button size="sm" variant="tinted" onClick={() => nav('/plan')}>{t('Set up in Plan')}</Button></div>
+      </div>) : <>
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w - 1)} aria-label={t('Previous week')}><Icon name="chevronLeft" /></button>
+          <div className="small muted" style={{ fontWeight: 500 }}>{wkLabel}</div>
+          <button className="iconbtn" style={{ width: 30, height: 30, fontSize: 15 }} onClick={() => setWeekOffset(w => w + 1)} aria-label={t('Next week')}><Icon name="chevronRight" /></button>
+        </div>
+        <div className="week">{strip}</div>
+      </>}
     </div>
+
+    {pilot && user && !user.admin && <>
+      <StudentAssistance />
+      {S.active && <StudentLiveSharing />}
+      <StudentCoachHub key={user.id} active={!!S.active} />
+    </>}
 
     {/* Jump to the gym check-in cards (QR membership codes). Shown here as a quick tap on
         arrival at the gym; folds away per user via the "Gym check-in" switch in Settings. */}

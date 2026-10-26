@@ -37,9 +37,10 @@ function useMyPayments() {
   return { data: result && result.userId === user?.id ? result.data : null, error, load, canRead }
 }
 
-export function StudentPaymentCard() {
+export function StudentPaymentCard({ onSummary }) {
   const nav = useNavigate()
   const { data, canRead } = useMyPayments()
+  useEffect(() => { if (data) onSummary?.(data.summary) }, [data, onSummary])
   if (!canRead) return null
   const sub = !data ? 'Pagos y próximas renovaciones' : data.summary.nextDueOn ? `Próxima renovación · ${fmtDate(data.summary.nextDueOn)}` : 'Tus pagos y recordatorios'
   return <Section className="trainer-assignment"><Row icon="calendar" iconTint="var(--indigo)" title="Mis pagos" subtitle={sub} accessory="chevron" onClick={() => nav('/payments')}>

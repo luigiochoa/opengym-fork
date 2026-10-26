@@ -82,7 +82,7 @@ function SharingController({ publisher = false }) {
   </Section>
 }
 
-export function TrainerLive() {
+export function TrainerLive({ hideEmpty = false }) {
   const user = useStore(s => s.user)
   const pilot = useStore(s => s.config?.trainer_pilot)
   const allowed = !!(pilot && user?.owner)
@@ -108,6 +108,7 @@ export function TrainerLive() {
   const data = result?.id === user.id ? result : null
   const now = data ? data.serverTime + Math.max(0, clock - data.receivedAt) : clock
   const pupils = data?.pupils.filter(p => p.activity) || []
+  if (hideEmpty && !error && (!data || !pupils.length)) return null
   return <Section title="Sesiones compartidas" footer={error || 'Actividad aproximada según lo registrado en la app. Se actualiza cada 5 segundos.'}>
     {!data ? <Row icon="clock" title="Consultando sesiones…" /> : !pupils.length ? <Row icon="dumbbell" title="Sin sesiones compartidas ahora" subtitle="Cada alumno elige si quiere compartir su actividad durante el entrenamiento." /> : pupils.map(p => {
       const a = p.activity, stale = a.stale || now - a.updatedAt >= 35000

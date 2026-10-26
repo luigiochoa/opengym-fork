@@ -43,3 +43,38 @@
 .trainer-history-comment{margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 .trainer-history-comment p{margin-top:4px}
 #trainer-help,#trainer-pupils{scroll-margin-top:20px}
+
+/* Local preview: people and today's training lead; tools open on demand. */
+.trainer-team{padding-bottom:96px}
+.trainer-toolbar{display:flex;align-items:center;gap:10px;margin:-4px 0 22px}
+.trainer-toolbar .btn{width:auto;flex:none;white-space:nowrap}
+.trainer-toolbar .btn:first-child{flex:1}
+.trainer-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:26px}
+.trainer-metric{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:104px;padding:14px 16px;background:var(--surface-2);border:1px solid transparent;border-radius:18px;color:var(--label);text-align:left;cursor:pointer}
+.trainer-metric>svg{width:18px;height:18px;color:var(--label-2)}
+.trainer-metric strong{font-size:28px;line-height:1.1;font-weight:650;font-variant-numeric:tabular-nums}
+.trainer-metric span{font-size:13px;color:var(--label-2)}
+.trainer-metric.selected{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--surface-2))}
+.trainer-metric.urgent strong,.trainer-metric.urgent>svg{color:var(--orange)}
+.trainer-metric:focus-visible,.student-coach-hub>summary:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.trainer-pupil-tags{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:40%}
+.trainer-pupil-tags:empty{display:none}
+.trainer-detail-actions{margin:0 0 20px}
+.trainer-retry{font-size:13px;color:var(--red);margin-bottom:18px}
+.student-coach-hub{margin:20px 0;background:var(--surface-2);border-radius:18px;overflow:hidden}
+.student-coach-hub>summary{display:flex;align-items:center;gap:12px;padding:16px;min-height:76px;cursor:pointer;list-style:none}
+.student-coach-hub>summary::-webkit-details-marker{display:none}
+.student-coach-label{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.student-coach-label strong{font-size:17px;font-weight:550;line-height:1.25;overflow-wrap:anywhere}
+.student-coach-label>span{font-size:13px;color:var(--label-2)}
+.student-coach-chevron{width:16px;height:16px;color:var(--label-2);flex:none;transition:transform .16s}
+.student-coach-hub[open] .student-coach-chevron{transform:rotate(90deg)}
+.student-coach-body{padding:0 10px 2px;border-top:var(--hair) solid var(--sep)}
+.student-coach-body .sect:first-child{margin-top:14px}
+.student-coach-body .sect-b{background:var(--surface)}
+.home-today-card .today-row{margin-top:0;padding-top:8px;padding-bottom:16px}
+.home-today-card .today-row .ttl{font-size:22px;line-height:1.25}
+.home-today-card .today-row .lbl2{margin-bottom:5px}
+.home-today-card .week{margin-top:10px}
+@media(max-width:420px){.trainer-metric{padding:13px 12px}.trainer-overview{gap:8px}.trainer-pupil-tags .tag{font-size:10px}.student-coach-hub>summary{gap:9px;padding:14px}.student-coach-hub>summary>.tag{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.student-coach-chevron{transition:none}}

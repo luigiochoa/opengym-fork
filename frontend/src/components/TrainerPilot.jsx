@@ -31,7 +31,7 @@ function FeedbackSheet({ assignment, saved, close }) {
   </>
 }
 
-export function TrainerHome() {
+export function TrainerHome({ onAssignmentStatus }) {
   const user = useStore(s => s.user)
   const enabled = useStore(s => s.config?.trainer_pilot)
   const state = useStore(s => s.S)
@@ -51,9 +51,11 @@ export function TrainerHome() {
     const timer = setInterval(refresh, 30000)
     return () => { active = false; clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('online', refresh) }
   }, [enabled, user?.id])
+  useEffect(() => { onAssignmentStatus?.({ id: assignment?.id, pending: !!assignment && !assignment.accepted, trainerName: assignment?.trainerName }) }, [onAssignmentStatus, assignment?.id, assignment?.accepted, assignment?.trainerName])
   if (!enabled || !user) return null
-  if (user.owner) return <Section><Row icon="personCircle" iconTint="var(--indigo)" title="Mis alumnos" subtitle="Rutinas y seguimiento" accessory="chevron" onClick={() => nav('/trainer')} /></Section>
-  if (user.admin || !assignment) return error ? <p role="status" className="sect-f">{error}</p> : null
+  if (user.owner) return <Section><Row icon="personCircle" iconTint="var(--indigo)" title="Mi equipo" subtitle="Alumnos, rutinas y seguimiento" accessory="chevron" onClick={() => nav('/trainer')} /></Section>
+  if (user.admin) return null
+  if (!assignment) return <Section><Row icon="clipboard" title="Tu próxima rutina" subtitle={error || 'Cuando tu entrenador te asigne una rutina, podrás recibirla aquí.'} /></Section>
   const imported = state.trainerApplied?.includes(assignment.id)
   const accept = async () => {
     setBusy(true); setError('')
